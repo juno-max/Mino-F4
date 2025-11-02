@@ -1,0 +1,5 @@
+# Product Mission (Lite)
+
+MINO is an Enterprise Web Agent Platform that helps power builders and business analysts create, validate, and deploy intelligent web automation workflows by teaching through natural demonstration and validating accuracy through systematic ground truth testing before production deployment.
+
+MINO serves technical operators at mid-to-enterprise companies who need to automate complex manual web workflows (competitive pricing intelligence, restaurant market data, regulatory compliance monitoring) feeding into core business systems. Unlike traditional scrapers requiring CSS selectors or visual builders with complex configuration, MINO learns by watching users perform workflows naturally through screen sharing. Unlike competitors that run workflows blindly, MINO requires systematic ground truth validation on sample sites before production deployment, providing measurable accuracy metrics (90-95% after 3-5 refinements). Unlike black-box AI platforms, MINO shows exactly where and why extractions fail and suggests specific instruction refinements, enabling transparent accuracy improvement from 60% baseline to 95%+ through guided iterations.

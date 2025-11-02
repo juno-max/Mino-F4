@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Warm fintech theme - Stone backgrounds with Amber accents */
+    --background: 30 20% 98%; /* stone-50 */
+    --foreground: 24 10% 10%; /* stone-900 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 10%;
+
+    --primary: 32 95% 44%; /* amber-600 */
+    --primary-foreground: 60 9% 98%;
+
+    --secondary: 24 6% 83%; /* stone-300 */
+    --secondary-foreground: 24 10% 10%;
+
+    --muted: 30 12% 90%; /* stone-100 */
+    --muted-foreground: 25 5% 45%;
+
+    --accent: 38 92% 50%; /* amber-500 */
+    --accent-foreground: 60 9% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 60 9% 98%;
+
+    --border: 24 6% 90%; /* stone-200 */
+    --input: 24 6% 90%;
+    --ring: 32 95% 44%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 24 10% 10%;
+    --foreground: 60 9% 98%;
+
+    --card: 24 10% 10%;
+    --card-foreground: 60 9% 98%;
+
+    --popover: 24 10% 10%;
+    --popover-foreground: 60 9% 98%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 24 10% 10%;
+
+    --secondary: 24 6% 20%;
+    --secondary-foreground: 60 9% 98%;
+
+    --muted: 24 6% 15%;
+    --muted-foreground: 25 5% 60%;
+
+    --accent: 38 92% 50%;
+    --accent-foreground: 24 10% 10%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 60 9% 98%;
+
+    --border: 24 6% 20%;
+    --input: 24 6% 20%;
+    --ring: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground));
+    border-radius: 3px;
+  }
+}

@@ -1,0 +1,16 @@
+url,company_name,gt_monthly_price,gt_annual_price,gt_free_trial
+https://example.com,Example Corp,$99/mo,$999/yr,Yes
+https://acme.com,Acme Inc,$49/mo,$490/yr,14 days
+https://testco.com,TestCo LLC,$199/mo,$1990/yr,No
+https://demo.com,Demo Solutions,$79/mo,$790/yr,30 days
+https://startup.io,Startup IO,$29/mo,$290/yr,Yes
+https://enterprise.co,Enterprise Co,$299/mo,$2990/yr,Contact Sales
+https://saasco.com,SaaS Co,$149/mo,$1490/yr,Yes
+https://techfirm.com,Tech Firm,$89/mo,$890/yr,7 days
+https://cloudapp.io,CloudApp,$59/mo,$590/yr,Yes
+https://platform.com,Platform Inc,$179/mo,$1790/yr,No
+https://toolsuite.com,Tool Suite,$39/mo,$390/yr,Yes
+https://business.co,Business Co,$249/mo,$2490/yr,Contact Sales
+https://agency.com,Agency Pro,$129/mo,$1290/yr,14 days
+https://consultant.io,Consultant IO,$199/mo,$1990/yr,Yes
+https://services.com,Services Inc,$69/mo,$690/yr,No
