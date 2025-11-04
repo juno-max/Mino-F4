@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, batches, executions, jobs, sessions, projects } from '@/db'
 import { eq, desc } from 'drizzle-orm'
 import { executeEvaWorkflow } from '@/lib/eva-executor'
+import {
+  publishExecutionStarted,
+  publishJobStarted,
+  publishJobProgress,
+  publishJobCompleted,
+  publishJobFailed,
+  publishExecutionStatsUpdated,
+  publishExecutionCompleted,
+} from '@/lib/execution-events'
 
 // Enable CORS
 const corsHeaders = {
@@ -118,6 +127,16 @@ export async function POST(
       startedAt: new Date(),
     }).returning()
 
+    // Publish execution started event
+    publishExecutionStarted({
+      executionId: execution.id,
+      batchId: params.batchId,
+      projectId: params.id,
+      totalJobs: jobsToExecute.length,
+      concurrency: execution.concurrency || 5,
+      executionType: executionType as 'test' | 'production',
+    })
+
     // Run execution asynchronously with EVA agent
     if (useAgentQL) {
       console.log('[Execute] Starting EVA agent execution for', jobsToExecute.length, 'jobs')
@@ -178,14 +197,43 @@ async function executeEvaJobs(
       const startTime = Date.now()
 
       // Update job status to running
-      await db.update(jobs).set({ status: 'running', lastRunAt: new Date() }).where(eq(jobs.id, job.id))
+      await db.update(jobs).set({
+        status: 'running',
+        lastRunAt: new Date(),
+        startedAt: new Date(),
+        progressPercentage: 0,
+      }).where(eq(jobs.id, job.id))
       console.log('[executeEvaJobs] Job', job.id, 'status updated to running')
+
+      // Publish job started event
+      publishJobStarted({
+        executionId,
+        jobId: job.id,
+        batchId: job.batchId,
+        siteUrl: job.siteUrl,
+        siteName: job.siteName,
+        goal: job.goal,
+      })
 
       // Update execution stats
       await db.update(executions).set({
         runningJobs: 1,
         queuedJobs: jobsList.length - jobsList.indexOf(job) - 1,
+        lastActivityAt: new Date(),
       }).where(eq(executions.id, executionId))
+
+      // Publish stats update event
+      const currentStats = {
+        totalJobs: jobsList.length,
+        completedJobs: jobsList.indexOf(job),
+        runningJobs: 1,
+        queuedJobs: jobsList.length - jobsList.indexOf(job) - 1,
+        errorJobs: 0,
+      }
+      publishExecutionStatsUpdated({
+        executionId,
+        stats: currentStats,
+      })
 
       // Create session
       const sessionNumber = 1 // First attempt
@@ -241,7 +289,31 @@ async function executeEvaJobs(
           status: jobStatus,
           isEvaluated: isAccurate !== null,
           evaluationResult: isAccurate === true ? 'pass' : isAccurate === false ? 'fail' : null,
+          completedAt: new Date(),
+          progressPercentage: 100,
+          executionDurationMs: executionTimeMs,
         }).where(eq(jobs.id, job.id))
+
+        // Publish job completion event
+        if (result.error) {
+          publishJobFailed({
+            executionId,
+            jobId: job.id,
+            status: 'error',
+            errorMessage: result.error,
+            failureReason: 'EVA execution error',
+          })
+        } else {
+          publishJobCompleted({
+            executionId,
+            jobId: job.id,
+            status: 'completed',
+            duration: executionTimeMs,
+            extractedData: result.extractedData,
+            isEvaluated: isAccurate !== null,
+            evaluationResult: isAccurate === true ? 'pass' : isAccurate === false ? 'fail' : undefined,
+          })
+        }
 
         // Update execution stats
         const completedJobs = jobsList.indexOf(job) + 1
@@ -250,7 +322,20 @@ async function executeEvaJobs(
           completedJobs,
           runningJobs: 0,
           errorJobs,
+          lastActivityAt: new Date(),
         }).where(eq(executions.id, executionId))
+
+        // Publish stats update
+        publishExecutionStatsUpdated({
+          executionId,
+          stats: {
+            totalJobs: jobsList.length,
+            completedJobs,
+            runningJobs: 0,
+            queuedJobs: jobsList.length - completedJobs,
+            errorJobs,
+          },
+        })
 
       } catch (error: any) {
         console.error(`Job ${job.id} EVA execution error:`, error)
@@ -269,7 +354,39 @@ async function executeEvaJobs(
         // Update job as error
         await db.update(jobs).set({
           status: 'error',
+          completedAt: new Date(),
+          executionDurationMs: executionTimeMs,
         }).where(eq(jobs.id, job.id))
+
+        // Publish job failed event
+        publishJobFailed({
+          executionId,
+          jobId: job.id,
+          status: 'error',
+          errorMessage: error.message,
+          failureReason: 'EVA execution error',
+        })
+
+        // Update execution error count
+        const completedJobs = jobsList.indexOf(job) + 1
+        await db.update(executions).set({
+          completedJobs,
+          runningJobs: 0,
+          errorJobs: completedJobs,
+          lastActivityAt: new Date(),
+        }).where(eq(executions.id, executionId))
+
+        // Publish stats update
+        publishExecutionStatsUpdated({
+          executionId,
+          stats: {
+            totalJobs: jobsList.length,
+            completedJobs,
+            runningJobs: 0,
+            queuedJobs: jobsList.length - completedJobs,
+            errorJobs: completedJobs,
+          },
+        })
       }
     }
 
@@ -278,6 +395,22 @@ async function executeEvaJobs(
       status: 'completed',
       completedAt: new Date(),
     }).where(eq(executions.id, executionId))
+
+    // Publish execution completed event
+    const finalExecution = await db.query.executions.findFirst({
+      where: eq(executions.id, executionId),
+    })
+    if (finalExecution) {
+      publishExecutionCompleted({
+        executionId,
+        completedJobs: finalExecution.completedJobs,
+        totalJobs: finalExecution.totalJobs,
+        passRate: finalExecution.passRate ? Number(finalExecution.passRate) : undefined,
+        duration: finalExecution.startedAt && finalExecution.completedAt
+          ? finalExecution.completedAt.getTime() - finalExecution.startedAt.getTime()
+          : 0,
+      })
+    }
 
   } catch (error) {
     console.error('EVA execution error:', error)

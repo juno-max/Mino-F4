@@ -61,6 +61,16 @@ export const jobs = pgTable('jobs', {
   hasGroundTruth: boolean('has_ground_truth').default(false).notNull(),
   isEvaluated: boolean('is_evaluated').default(false).notNull(),
   evaluationResult: text('evaluation_result'), // pass, fail
+  // Live tracking fields for real-time monitoring
+  currentStep: text('current_step'),
+  currentUrl: text('current_url'),
+  progressPercentage: integer('progress_percentage').default(0).notNull(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  executionDurationMs: integer('execution_duration_ms'),
+  retryCount: integer('retry_count').default(0).notNull(),
+  retryReason: text('retry_reason'),
+  // Timestamps
   lastRunAt: timestamp('last_run_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -97,9 +107,9 @@ export const executions = pgTable('executions', {
   id: uuid('id').primaryKey().defaultRandom(),
   batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  status: text('status').notNull().default('pending'), // pending, running, completed, failed, paused, stopped
   executionType: text('execution_type').notNull().default('test'), // test, production
-  concurrency: integer('concurrency').default(20).notNull(),
+  concurrency: integer('concurrency').default(5).notNull(), // Changed default from 20 to 5
   totalJobs: integer('total_jobs').notNull(),
   completedJobs: integer('completed_jobs').default(0).notNull(),
   runningJobs: integer('running_jobs').default(0).notNull(),
@@ -112,6 +122,15 @@ export const executions = pgTable('executions', {
   accuracyPercentage: decimal('accuracy_percentage', { precision: 5, scale: 2 }),
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
   actualCost: decimal('actual_cost', { precision: 10, scale: 2 }),
+  // Live execution control fields
+  pausedAt: timestamp('paused_at'),
+  resumedAt: timestamp('resumed_at'),
+  stoppedAt: timestamp('stopped_at'),
+  stopReason: text('stop_reason'),
+  sampleSize: integer('sample_size'),
+  estimatedDurationMs: integer('estimated_duration_ms'),
+  lastActivityAt: timestamp('last_activity_at'),
+  // Timestamps
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

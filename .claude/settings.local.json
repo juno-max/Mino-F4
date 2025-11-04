@@ -83,7 +83,22 @@
       "Bash(node reset-stuck-jobs.js:*)",
       "Bash(node add-screenshot-column.js:*)",
       "Bash(node test-complete-flow.js:*)",
-      "Bash(node check-successful-job.js:*)"
+      "Bash(node check-successful-job.js:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh auth login:*)",
+      "Bash(git config:*)",
+      "Bash(gh repo view:*)",
+      "Bash(npx create-next-app@14.2.0:*)",
+      "Bash(node test-mino-v2-setup.js:*)",
+      "Bash(node test-e2e-mino-v2.js:*)",
+      "Bash(jq:*)",
+      "Bash(node test-job-apis.js:*)",
+      "Bash(chmod:*)",
+      "Bash(node test-full-job-flow.js:*)",
+      "Bash(node verify-all-job-features.js:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres.jyoxngcfkyjykalweosd:kyb!FHG9ckw9aqt1xnf@aws-1-us-east-1.pooler.supabase.com:6543/postgres\" npx drizzle-kit@latest push:*)",
+      "Bash(node add-live-execution-columns.js:*)"
     ],
     "deny": [],
     "ask": []

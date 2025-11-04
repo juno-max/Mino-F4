@@ -37,7 +37,8 @@ export function RunTestButton({ projectId, batchId, totalJobs, hasGroundTruth }:
       }
 
       const execution = await response.json()
-      router.push(`/projects/${projectId}/batches/${batchId}/executions/${execution.execution.id}`)
+      // Redirect to live monitoring page
+      router.push(`/projects/${projectId}/batches/${batchId}/executions/${execution.execution.id}/live`)
     } catch (error) {
       console.error('Test execution error:', error)
       setIsRunning(false)
