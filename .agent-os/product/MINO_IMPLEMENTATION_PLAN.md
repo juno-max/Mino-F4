@@ -1,12 +1,66 @@
-# MINO NO-CODE PLATFORM - IMPLEMENTATION PLAN
+# MINO V2 - STAGED IMPLEMENTATION PLAN
+
+> **Current Status**: MINO F2 (MVP) completed and deployed. This plan outlines V2 feature development.
+>
+> **Reference Documents**:
+> - **FEATURE_ROADMAP.md** - All features organized by phase with priorities
+> - **GT_FEATURES_ROADMAP.md** - Ground truth features only (15 features, 4 stages)
+> - **MINO_MVP_SPEC.md** - Product specification and design system
 
 ## Project Overview
 
-Build a professional Enterprise Web Agent Platform that enables power builders to create, validate, and deploy intelligent web automation workflows through conversational teaching and systematic ground truth validation.
+**Mission**: Enhance MINO V2 with advanced GT workflows, real-time execution monitoring, AI-powered refinement, and comprehensive accuracy analytics.
 
-**Duration**: 8-10 weeks  
-**Team**: 1-2 developers using Claude Code + Cursor  
-**Approach**: Iterative, feature-complete phases with continuous testing
+**Duration**: 12 weeks (4 stages × 3 weeks each)
+**Team**: 1-2 developers using Claude Code + Cursor
+**Approach**: Stage-gated deployment with rollback capability at each stage
+**Build Strategy**: Enhance existing pages and components, don't rebuild from scratch
+
+---
+
+## Current State (MINO F2 Baseline)
+
+### ✅ Infrastructure Complete
+- Next.js 14 with App Router
+- TypeScript with strict mode
+- Tailwind CSS with fintech design system
+- Drizzle ORM + PostgreSQL (Supabase)
+- EVA Agent integration for web automation
+- All core API routes operational
+
+### ✅ Database Schema Complete
+```typescript
+// Existing tables:
+- projects (with instructions)
+- batches (with columnSchema, csvData, hasGroundTruth, groundTruthColumns)
+- jobs (with groundTruthData, csvRowData, evaluationResult, isEvaluated)
+- sessions (with extractedData, screenshots, streamingUrl)
+- executions (with status tracking)
+- instructionVersions (ready for UI)
+```
+
+### ✅ Pages & Navigation Complete
+```
+app/
+├── page.tsx                    # Home/Jobs dashboard ✅
+├── projects/
+│   ├── page.tsx                # Project list ✅
+│   ├── new/page.tsx            # Create project ✅
+│   └── [id]/
+│       ├── page.tsx            # Project detail ✅
+│       ├── jobs/[jobId]/page.tsx  # Job/session detail ✅
+│       └── batches/
+│           ├── new/page.tsx    # CSV upload ✅
+│           ├── [batchId]/page.tsx  # Batch detail ✅
+│           └── [batchId]/executions/[executionId]/page.tsx  # Execution detail ✅
+```
+
+### 🚧 Enhancement Needed
+- Navigation: Side panel for project/batch hierarchy
+- GT Setting: UI for 5 pathways (CSV works, session/manual/review/click missing)
+- Evaluation: Advanced comparison logic (exact match works, fuzzy/context-aware missing)
+- Analytics: Dashboard visualization (metrics calculated, UI missing)
+- Refinement: Conversational instruction updates (versioning works, AI suggestions missing)
 
 ---
 
@@ -59,9 +113,432 @@ Build a professional Enterprise Web Agent Platform that enables power builders t
 
 ---
 
-## Implementation Phases
+## V2 Implementation Stages (Stage-Gated Approach)
 
-### Phase 0: Project Setup & Infrastructure (Week 1)
+> **Key Principle**: Build upon existing structure. Enhance, don't rebuild. Each stage can be rolled back independently.
+
+---
+
+### STAGE 1: FOUNDATION (Weeks 1-3)
+**Goal**: Navigation improvements & basic GT workflow
+
+#### Database Migrations
+```sql
+-- Add GT source tracking
+ALTER TABLE jobs ADD COLUMN gt_source TEXT;
+ALTER TABLE jobs ADD COLUMN gt_edit_history JSONB;
+ALTER TABLE jobs ADD COLUMN gt_created_at TIMESTAMP;
+
+-- Add evaluation results table
+CREATE TABLE evaluation_results (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+  session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+  overall_accuracy DECIMAL(5,2),
+  field_accuracies JSONB,
+  mismatch_explanations JSONB,
+  evaluated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Add accuracy metrics table
+CREATE TABLE accuracy_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id),
+  batch_id UUID REFERENCES batches(id),
+  execution_id UUID REFERENCES executions(id),
+  instruction_version_id UUID REFERENCES instruction_versions(id),
+  overall_accuracy DECIMAL(5,2),
+  column_accuracies JSONB,
+  total_jobs_evaluated INTEGER,
+  pass_count INTEGER,
+  fail_count INTEGER,
+  partial_count INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### Features to Build
+1. **Navigation Side Panel**
+   - Create `CollapsibleSidePanel` component
+   - Project selector with metadata
+   - Batch list with GT indicators (🎯)
+   - Breadcrumb trail component
+   - **Files to Modify**:
+     - `app/layout.tsx` - Add side panel wrapper
+     - New: `components/CollapsibleSidePanel.tsx`
+     - New: `components/BreadcrumbNav.tsx`
+
+2. **Enhanced CSV Upload**
+   - Highlight GT columns with 🎯 icon in preview
+   - GT coverage summary
+   - Data quality warnings
+   - **Files to Modify**:
+     - `app/projects/[id]/batches/new/page.tsx`
+     - New: `components/GTColumnHighlighter.tsx`
+
+3. **GT Setting from Session JSON (Pathway 2)**
+   - "Set as GT ★" button in session detail
+   - Field selector for partial GT
+   - Track GT source
+   - **Files to Modify**:
+     - `app/projects/[id]/jobs/[jobId]/page.tsx`
+     - New: `components/GTSelector.tsx`
+     - New API: `POST /api/jobs/[id]/set-ground-truth`
+
+4. **Basic Evaluation Engine**
+   - Compare extracted data vs GT (exact match)
+   - Calculate per-field accuracy
+   - Store in evaluation_results table
+   - **Files to Create**:
+     - `lib/evaluation/compare.ts`
+     - New API: `POST /api/jobs/[id]/evaluate`
+
+5. **Display Evaluation Results**
+   - ⭐ icon for jobs with GT
+   - Pass/fail badge
+   - Inline expected vs actual
+   - **Files to Modify**:
+     - `app/page.tsx` (home dashboard)
+
+#### API Routes to Create/Modify
+```typescript
+POST   /api/jobs/[id]/set-ground-truth          // NEW
+POST   /api/jobs/[id]/evaluate                  // NEW
+GET    /api/projects/[id]/navigation-data       // NEW - for side panel
+```
+
+#### Testing
+- Unit: GT setting, evaluation logic
+- Integration: Set GT → evaluate → show result
+- E2E: User sets GT from session, sees pass/fail in table
+
+#### Success Criteria
+- ✅ Side panel navigation working
+- ✅ Users can set GT from session output in <10 seconds
+- ✅ Evaluation runs in <1 second for 100 jobs
+- ✅ GT indicators visible throughout app
+- ✅ All tests passing
+
+#### Rollback Plan
+- Feature flag: `features.gtFromSession = false`
+- Database migrations are additive (no data loss)
+- UI reverts to previous navigation
+
+---
+
+### STAGE 2: ENHANCEMENT (Weeks 4-6)
+**Goal**: Multiple GT pathways & live execution viewer
+
+#### Features to Build
+1. **GT Pathway 3: Manual Editing**
+   - Edit mode in session detail
+   - Field-by-field editing with validation
+   - GT edit history tracking
+   - **Files to Modify**:
+     - `app/projects/[id]/jobs/[jobId]/page.tsx`
+     - New: `components/GTEditor.tsx`
+     - New API: `PATCH /api/jobs/[id]/edit-ground-truth`
+
+2. **GT Pathway 4: Quick Review Mode**
+   - Keyboard shortcuts system ([★] for GT)
+   - Review queue with prioritization
+   - Side-by-side reviewer
+   - **Files to Modify**:
+     - `app/page.tsx`
+     - New: `components/ReviewModeOverlay.tsx`
+     - New: `components/KeyboardShortcutHandler.tsx`
+     - New API: `POST /api/jobs/[id]/set-gt-from-review`
+
+3. **GT Pathway 5: Click-to-Set**
+   - Context menu on table rows
+   - "Set as GT" action
+   - Confirmation modal
+   - **Files to Modify**:
+     - `app/page.tsx`
+     - New: `components/ContextMenu.tsx`
+
+4. **Live Execution Viewer**
+   - 4-6 agent cards in grid
+   - WebSocket connection for real-time updates
+   - Stop/pause controls
+   - **Files to Create**:
+     - `app/projects/[id]/batches/[batchId]/executions/[executionId]/live/page.tsx`
+     - New: `components/LiveExecutionGrid.tsx`
+     - New: `components/AgentCard.tsx`
+     - WebSocket: `ws://api/executions/[id]/stream`
+
+5. **Live Results Streaming**
+   - WebSocket for result updates
+   - Real-time row insertion
+   - Quick action buttons per row
+   - **Files to Modify**:
+     - `app/page.tsx`
+     - WebSocket: `ws://api/projects/[id]/results-stream`
+
+6. **GT Management Dashboard**
+   - GT source indicator badges
+   - GT coverage metrics per batch
+   - GT edit history view
+   - **Files to Create**:
+     - `app/projects/[id]/ground-truth/page.tsx`
+     - New: `components/GTManagementDashboard.tsx`
+
+#### API Routes to Create/Modify
+```typescript
+PATCH  /api/jobs/[id]/edit-ground-truth         // NEW
+POST   /api/jobs/[id]/set-gt-from-review        // NEW
+POST   /api/jobs/[id]/mark                      // NEW - mark correct/incorrect
+GET    /api/jobs/[id]/ground-truth-history      // NEW
+POST   /api/executions/[id]/pause               // NEW
+POST   /api/executions/[id]/resume              // NEW
+WS     /api/executions/[id]/stream              // NEW - WebSocket
+WS     /api/projects/[id]/results-stream        // NEW - WebSocket
+```
+
+#### Testing
+- Unit: Each GT pathway, keyboard shortcuts
+- Integration: All 5 pathways → GT set → evaluation
+- E2E: User reviews jobs with [★] key, sees GT set
+- Load: Live execution with 100 concurrent jobs
+
+#### Success Criteria
+- ✅ All 5 GT pathways working
+- ✅ Users utilize 3+ pathways
+- ✅ Live execution viewer loads in <2 seconds
+- ✅ WebSocket updates <500ms latency
+- ✅ Quick review keyboard shortcuts working
+
+#### Rollback Plan
+- Feature flags: `features.gtEditing = false`, `features.liveExecution = false`
+- Keep Pathway 1 & 2 from Stage 1
+- Fall back to polling if WebSocket fails
+
+---
+
+### STAGE 3: INTELLIGENCE (Weeks 7-9)
+**Goal**: AI-powered refinement & analytics
+
+#### Features to Build
+1. **Accuracy Dashboard**
+   - Large accuracy cards with trends
+   - Per-field horizontal bar charts
+   - Version comparison
+   - **Files to Create**:
+     - `app/projects/[id]/accuracy/page.tsx`
+     - New: `components/AccuracyDashboard.tsx`
+     - New: `components/FieldAccuracyChart.tsx`
+
+2. **Error Pattern Analysis**
+   - Group similar mismatches
+   - AI-powered pattern detection
+   - Suggested fixes
+   - **Files to Create**:
+     - `lib/ai/pattern-analysis.ts`
+     - New: `components/ErrorPatternCard.tsx`
+     - New API: `GET /api/batches/[id]/error-patterns`
+
+3. **Conversational Refinement**
+   - Natural language refinement input
+   - AI translates to instruction updates
+   - Instruction diff preview
+   - Dry run on samples
+   - **Files to Create**:
+     - `app/projects/[id]/refine/page.tsx`
+     - New: `components/RefinementInput.tsx`
+     - New: `components/InstructionDiffViewer.tsx`
+     - New: `lib/ai/instruction-refiner.ts`
+     - New API: `POST /api/projects/[id]/refine`
+     - New API: `POST /api/projects/[id]/dry-run`
+
+4. **Version Comparison**
+   - Side-by-side version diff
+   - Accuracy delta per version
+   - Performance trending chart
+   - **Files to Create**:
+     - `app/projects/[id]/versions/page.tsx`
+     - New: `components/VersionComparisonView.tsx`
+     - New: `components/AccuracyTrendChart.tsx`
+
+5. **Improvement Recommendations**
+   - AI-generated suggestions based on GT mismatches
+   - Priority ranking
+   - Expected impact estimates
+   - **Files to Create**:
+     - `lib/ai/recommendations.ts`
+     - New: `components/RecommendationCard.tsx`
+     - New API: `GET /api/projects/[id]/recommendations`
+
+#### AI Integration
+```typescript
+// lib/ai/openai-client.ts
+- Pattern analysis: Analyze failures, suggest fixes
+- Instruction refinement: Translate natural language to instruction updates
+- Mismatch explanations: Explain why extracted data doesn't match GT
+- Recommendations: Suggest improvements based on patterns
+```
+
+#### API Routes to Create/Modify
+```typescript
+POST   /api/projects/[id]/refine               // NEW - conversational refinement
+POST   /api/projects/[id]/dry-run              // NEW - test changes on samples
+GET    /api/batches/[id]/error-patterns        // NEW - grouped errors
+GET    /api/projects/[id]/recommendations      // NEW - AI suggestions
+GET    /api/projects/[id]/accuracy-trend       // NEW - accuracy over time
+GET    /api/executions/[id]/accuracy-dashboard // NEW - full metrics
+```
+
+#### Testing
+- Unit: AI prompt templates, recommendation logic
+- Integration: Refinement → dry run → apply → retest
+- E2E: User refines instructions, sees accuracy improve
+- AI: Test pattern detection accuracy
+
+#### Success Criteria
+- ✅ Accuracy dashboard loads in <2 seconds
+- ✅ Error patterns detected with 85%+ accuracy
+- ✅ Users improve accuracy by 15%+ using AI suggestions
+- ✅ Conversational refinement success rate >80%
+- ✅ Version comparison shows clear deltas
+
+#### Rollback Plan
+- Feature flag: `features.aiRefinement = false`
+- Fall back to manual instruction editing
+- Keep accuracy metrics, hide AI recommendations
+
+---
+
+### STAGE 4: POLISH (Weeks 10-12)
+**Goal**: Advanced evaluation & production readiness
+
+#### Features to Build
+1. **Fuzzy Matching**
+   - Currency normalization ($99 vs $99.00)
+   - Text normalization (whitespace, case)
+   - Date format variations
+   - Unit conversions
+   - **Files to Create**:
+     - `lib/evaluation/fuzzy-match.ts`
+     - `lib/evaluation/normalizers.ts`
+
+2. **Context-Aware Comparison**
+   - Data type detection
+   - Appropriate comparison logic per type
+   - Configurable tolerance levels
+   - **Files to Modify**:
+     - `lib/evaluation/compare.ts`
+
+3. **Detailed Mismatch Explanations**
+   - AI-generated explanations
+   - Visual diff highlighting
+   - Suggested instruction updates
+   - **Files to Create**:
+     - `lib/ai/mismatch-explainer.ts`
+     - New: `components/MismatchExplanation.tsx`
+
+4. **Advanced Filtering & Search**
+   - Universal search across all entities
+   - Save filter presets
+   - Fuzzy search with typo tolerance
+   - **Files to Modify**:
+     - All list pages (projects, batches, jobs)
+     - New: `components/UniversalSearch.tsx`
+
+5. **Export Functionality**
+   - Export to CSV/JSON/Excel
+   - Include GT columns
+   - Select columns to export
+   - **Files to Create**:
+     - New API: `GET /api/batches/[id]/export`
+     - New: `components/ExportModal.tsx`
+
+6. **Performance Optimization**
+   - Code splitting
+   - Image optimization
+   - Database query optimization
+   - Caching strategies
+   - **Files to Modify**: Various
+
+#### API Routes to Create/Modify
+```typescript
+GET    /api/batches/[id]/export                // NEW - export results
+GET    /api/search                             // NEW - universal search
+POST   /api/filters/save                       // NEW - save filter presets
+GET    /api/filters                            // NEW - get saved filters
+```
+
+#### Testing
+- Unit: Fuzzy matching accuracy, normalization logic
+- Integration: Fuzzy match reduces false negatives
+- E2E: Complete workflow from upload to export
+- Performance: Page load times <2s, API <200ms
+- Load: 1000+ concurrent users
+
+#### Success Criteria
+- ✅ Fuzzy matching reduces false negatives by 30%+
+- ✅ Export success rate >95%
+- ✅ Universal search returns results in <500ms
+- ✅ All pages load in <2 seconds
+- ✅ API P95 response time <200ms
+- ✅ Test coverage >80%
+- ✅ No critical bugs
+- ✅ Mobile usability score >80
+
+#### Rollback Plan
+- Feature flag: `features.fuzzyMatching = false`
+- Fall back to exact matching
+- Keep export functionality
+
+---
+
+## Development Workflow (Updated for V2)
+
+### Daily Workflow
+1. Pull latest from GitHub
+2. Check current stage in FEATURE_ROADMAP.md
+3. Implement features for current stage
+4. Write tests alongside code
+5. Run tests: `npm test`
+6. Commit with descriptive messages
+7. Push to staging branch
+8. Manual QA on staging environment
+9. Deploy to production (end of each stage)
+
+### Stage Gate Checklist
+Before moving to next stage:
+- [ ] All features in current stage implemented
+- [ ] All tests passing (>80% coverage)
+- [ ] Performance metrics met (<2s page loads, <200ms API)
+- [ ] User acceptance testing passed
+- [ ] No critical bugs
+- [ ] Documentation updated
+- [ ] Team review completed
+
+### Git Branch Strategy
+```
+main                  # Production (MINO F2)
+├── v2-stage-1        # Foundation stage
+├── v2-stage-2        # Enhancement stage
+├── v2-stage-3        # Intelligence stage
+└── v2-stage-4        # Polish stage
+```
+
+### Commit Conventions
+```
+feat(stage-1): Add side panel navigation
+feat(gt): Implement GT setting from session JSON
+fix(evaluation): Correct accuracy calculation for partial matches
+refactor(nav): Simplify breadcrumb trail component
+test(gt): Add E2E tests for GT pathways
+docs(api): Update API docs for evaluation endpoints
+```
+
+---
+
+## Legacy Implementation Phases (Pre-V2)
+
+> **Note**: The sections below document the original MVP implementation phases and are preserved for historical reference.
+
+### Phase 0: Project Setup & Infrastructure (Week 1) - ✅ COMPLETED
 
 **Goal**: Establish development environment with all core dependencies
 

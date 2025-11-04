@@ -67,24 +67,78 @@ Unlike black-box AI agent platforms that provide vague "90% success" claims with
 
 ## Key Features
 
-### Core Features
+### Phase 1: Project Setup & Configuration
 
-- **Conversational Workflow Capture**: Teach MINO your workflow by performing it naturally while screen sharing - no code, CSS selectors, XPath, or technical configuration required. Split-screen observation panel tracks actions with minimal interruption.
-- **Ground Truth Testing**: Validate accuracy on sample sites (10-50) with known-correct answers before deploying to full batches. Upload CSV with ground truth columns, compare expected vs. actual results, measure overall + per-column accuracy.
-- **Batch CSV Management**: Upload spreadsheets with URLs and optional ground truth data (auto-detect GT columns), manage multiple batches per project, track validation coverage metrics, handle 250-1000+ sites efficiently.
-- **Real-time Accuracy Metrics**: View overall accuracy percentage, per-column breakdown, success/partial/failed counts during test and production runs. Track execution time, cost per site, completion rates.
-- **Failure Pattern Analysis**: Automatically group similar failures (e.g., 12 sites failing on "Monthly price" extraction), identify root causes through pattern recognition, receive specific actionable suggestions for instruction refinements.
+- **Natural Language Task Description**: Describe what data to extract conversationally - AI interprets intent, extracts required fields, and suggests clarifications. Template library with examples for common use cases (pricing, contacts, products).
+- **Smart CSV Upload with GT Detection**: Drag-and-drop CSV upload with automatic ground truth column detection (recognizes `gt_`, `ground_truth_`, `expected_` prefixes). Real-time validation checks URLs, detects column types, shows data quality warnings, suggests batch names.
+- **Intelligent Schema Generation**: Auto-generate output schema from task description and GT columns. Visual schema builder with field cards, type inference, template schemas (Pricing, Contact, Product), validation against task intent.
+- **Data Preview & Validation**: Enhanced preview table showing input columns (from CSV) and output columns (to be filled by agents). Auto-map CSV to schema fields with confidence scores, detect anomalies and duplicates, validate required fields present.
+- **Smart Test Run Configuration**: Recommend 20-job test with diverse sampling (not just first 20). Cost and time estimates, pre-flight validation checks, 5-second countdown before execution.
 
-### Refinement & Deployment Features
+### Phase 2: Real-Time Execution & Initial Results
 
-- **Instruction Version Control**: Track all instruction changes over time with version numbers and change descriptions, compare versions side-by-side with diff view, rollback to previous versions if accuracy degrades, measure accuracy impact per refinement cycle.
-- **Iterative Testing Workflow**: Re-test on same sample sites after refinements to measure improvement delta, visualize accuracy trends over iterations (60% → 75% → 85% → 95%), track iteration counter and time-to-production-ready.
-- **Production Deployment Pipeline**: Deploy validated workflows at scale (batch graduation: 50 → 100 → full) with confidence, monitor real-time progress with ETA calculation, pause/resume executions, handle failures gracefully with automatic retry logic, cost and time estimates upfront.
-- **Result Export & Management**: Export results to CSV/JSON for analysis, filter and sort by accuracy/status/execution time, retry failed sites individually or in bulk, paginated result tables for large batches.
+- **Live Execution Viewer**: Watch 4-6 agents working concurrently in split-screen view. Real-time status streaming shows current URL, last action, next step for each agent. Stop/pause controls, early failure detection, adaptive rate limiting.
+- **Live Results Streaming**: Results populate row-by-row as jobs complete via WebSocket (no polling). Status indicators (✅ Complete, ⚠ Partial, ❌ Failed), confidence scores, automatic anomaly detection, smart column ordering.
+- **Enhanced Session Detail View**: Comprehensive session playback with screenshot timeline, timestamped tool calls, agent reasoning explanations. Compare sessions side-by-side, match tool calls to screenshots, business logic transparency with confidence scores.
+- **Ground Truth Setting from Sessions** ⭐: Select any subset of extracted data as GT directly from session view. Click "Set as GT ★" button, edit GT fields inline, track GT source (CSV/session/manual), GT appears with ⭐ icon in results table.
+- **Quick Analytics Dashboard**: Success breakdown (Complete/Partial/Failed), per-field accuracy if GT exists, common failure patterns with suggestions, predicted full dataset performance.
 
-### Analytics & Monitoring Features
+### Phase 3: Refinement & Iteration Loop
 
-- **Performance Dashboard**: Track execution time trends over iterations, success rates over time (detect accuracy degradation), cost per site metrics and ROI calculation, proactive alerts for performance issues.
-- **Proactive Recommendations**: Detect when site structures change (accuracy drop signals), suggest workflow updates and re-training, schedule systematic re-validation reminders, provide optimization tips based on execution patterns.
-- **Historical Comparison**: Compare batch results over time to identify accuracy regressions, track instruction effectiveness across versions, measure ROI (time savings: 5hr → 10min monthly, cost reduction, accuracy improvements).
-- **Knowledge Base Integration**: Save successful workflow patterns as reusable templates, access common issues and solutions library, view best practices documentation, contribute learnings to platform knowledge base.
+- **Conversational Instruction Refinement**: Describe problems in natural language - AI translates to instruction updates. Preview changes with before/after diff, dry run on sample jobs (3-5), see predicted impact before applying.
+- **Quick Review Mode**: Keyboard-driven result review ([→] next, [✓] correct, [✗] incorrect, [★] set GT). Prioritized queue shows low-confidence results first, side-by-side result + screenshot view, learns from user corrections.
+- **Instruction Version Control**: All instruction changes tracked with version numbers, accuracy impact, and descriptions. Side-by-side version comparison with diff view, performance trending chart, one-click rollback if accuracy degrades.
+- **Change Impact Preview**: Before rerunning, see predicted outcomes vs current results. Test new instructions on samples, selective rerun options (all/failed/subset), AI predicts change impact with confidence.
+- **Scale Decision Intelligence**: Confidence-based recommendations (refine more vs scale up). Risk assessment warns if test quality <85%, phased rollout option (50 → 100 → full), auto-pause if accuracy drops during full run.
+
+### Phase 4: Ground Truth Evaluation & Accuracy Optimization ⭐
+
+> See **GT_FEATURES_ROADMAP.md** for complete details on all GT-related features
+
+- **Multiple GT Setting Pathways** (5 ways):
+  1. Bulk CSV upload with GT columns
+  2. Select from session JSON output (any subset)
+  3. Manual field-by-field editing
+  4. Quick review keyboard shortcut ([★])
+  5. Click-to-set from results table
+- **Automatic GT Evaluation**: On GT creation, immediately evaluate existing sessions. Result-level indicators (✓ Match, ≈ Close, ✗ Mismatch), field-level accuracy breakdown, detailed mismatch explanations.
+- **Fuzzy Matching & Smart Comparison**: Currency normalization ($99 vs $99.00), text normalization (whitespace, case), date format variations, unit conversions, context-aware comparison logic per data type.
+- **Accuracy Dashboard with GT Metrics**: Large accuracy percentage display with trend indicators, horizontal bar charts per field showing individual field accuracy, version comparison showing accuracy delta per iteration, error pattern analysis with grouped failures and AI-powered suggestions.
+- **GT Management Features**: GT version history tracking all changes, GT source indicators (CSV/session/manual/review/click), GT edit history with timestamps and reasons, GT coverage metrics per batch (% jobs with GT).
+
+### Navigation & Persistent Features
+
+- **Hierarchical Side Panel Navigation**: Always-visible project selector, batch list with GT indicators (🎯), breadcrumb trail (Project → Batch → Session), context preservation on navigation, smart project suggestions.
+- **Universal Search & Filtering**: Search across projects/batches/sessions, filter by status/date/accuracy/GT availability, save filter presets, fuzzy search with typo tolerance.
+- **Export & Integration**: Export to CSV/JSON/Excel with GT columns included, select columns to export, API access for workflow automation, preserve metadata in exports.
+
+### Analytics & Continuous Improvement
+
+- **Performance Dashboard**: Execution time trends, success rates over time, cost per site metrics, accuracy degradation detection alerts, ROI calculation (time savings, cost reduction, accuracy improvements).
+- **Proactive Recommendations**: Detect site structure changes via accuracy drops, suggest workflow updates and re-training, scheduled re-validation reminders, optimization tips based on execution patterns, predict when workflows need updating.
+- **Historical Comparison & Learning**: Compare batch results over time, identify accuracy regressions, track instruction effectiveness across versions, platform-wide pattern learning, suggest successful patterns from similar projects.
+
+---
+
+## Implementation Status (MINO V2)
+
+### ✅ Completed Features (Current State)
+- Project and batch CRUD operations
+- CSV upload with batch creation
+- EVA agent integration for web automation
+- Job execution with session tracking
+- Real-time job status monitoring
+- Ground truth data storage in database
+- Basic evaluation (pass/fail indicators)
+- Results table with filters and sorting
+- Session detail view with screenshots
+- API routes for all core operations
+
+### 🚧 In Progress
+- Navigation side panel (structure exists, needs enhancement)
+- GT setting from session output (schema ready, UI needed)
+- Accuracy metrics dashboard (data calculated, visualization needed)
+- Instruction versioning (database ready, UI incomplete)
+
+### 📋 Planned (Next 12 Weeks)
+See **FEATURE_ROADMAP.md** and **GT_FEATURES_ROADMAP.md** for staged implementation plan with stage gates and rollback strategy.

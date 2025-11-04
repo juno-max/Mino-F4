@@ -1,13 +1,46 @@
-# MINO MVP - MINIMUM VIABLE PRODUCT SPECIFICATION
+# MINO V2 - PRODUCT SPECIFICATION & ROADMAP
 
-## Product Vision (One Sentence)
+> **Status Update**: MVP completed and deployed as MINO F2. This document now serves as the reference for V2 feature development.
+>
+> See also:
+> - **FEATURE_ROADMAP.md** - Complete feature list with staging plan
+> - **GT_FEATURES_ROADMAP.md** - All ground truth-specific features
+> - **MINO_IMPLEMENTATION_PLAN.md** - Technical implementation phases
+
+---
+
+## Current State (MINO F2 - Completed MVP)
+
+### ✅ Implemented Core Features
+1. **Project Management**: Create, edit, delete projects with natural language instructions
+2. **CSV Upload & Batch Creation**: Upload CSVs with automatic GT column detection
+3. **Job Execution**: EVA agent integration executing web automation workflows
+4. **Session Tracking**: Complete execution history with screenshots and tool calls
+5. **Real-Time Monitoring**: Job status updates, execution progress tracking
+6. **Ground Truth Storage**: GT data stored in database from CSV uploads
+7. **Basic Evaluation**: Pass/fail evaluation against ground truth
+8. **Results Dashboard**: Filterable table showing jobs, status, and evaluation results
+9. **API Infrastructure**: All API routes working (projects, batches, jobs, sessions, executions)
+
+### 🚧 Partially Implemented
+- GT workflow UI (data stored, advanced setting methods needed)
+- Accuracy analytics (metrics calculated, dashboard visualization incomplete)
+- Instruction versioning (schema exists, comparison UI needed)
+- Session detail enhancements (basic view exists, GT features missing)
+
+### 📋 Roadmap for V2 (Next 12 Weeks)
+See **FEATURE_ROADMAP.md** for complete staged implementation plan
+
+---
+
+## Product Vision
 Enable power builders to teach web automation workflows through demonstration, validate accuracy with ground truth testing, and deploy at scale - all without writing code.
 
 ---
 
 ## Core Value Proposition
-**Before Mino**: 5 hours of manual web work monthly  
-**After Mino**: 10 minutes to teach once, automated forever  
+**Before Mino**: 5 hours of manual web work monthly
+**After Mino**: 10 minutes to teach once, automated forever
 **Proof**: Systematic accuracy improvement from 60% → 90%+ through ground truth validation
 
 ---
