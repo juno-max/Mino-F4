@@ -28,15 +28,15 @@ export default async function ProjectDetailPage({
   return (
     <div className="min-h-screen bg-stone-50">
       {/* Header */}
-      <div className="border-b border-stone-200 bg-white">
+      <div className="border-b border-stone-200 bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link href="/projects" className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4">
+          <Link href="/projects" className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Projects
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-stone-900">{project.name}</h1>
+              <h1 className="text-2xl font-semibold text-stone-900">{project.name}</h1>
               {project.description && (
                 <p className="text-sm text-stone-600 mt-1">{project.description}</p>
               )}
@@ -60,7 +60,7 @@ export default async function ProjectDetailPage({
             <CardDescription>Natural language description of what data to extract</CardDescription>
           </CardHeader>
           <CardContent>
-            <pre className="whitespace-pre-wrap font-mono text-sm text-stone-700 bg-stone-50 p-4 rounded-md">
+            <pre className="whitespace-pre-wrap font-mono text-sm text-stone-700 bg-stone-50 p-4 rounded-lg border border-stone-200">
               {project.instructions}
             </pre>
           </CardContent>
@@ -81,7 +81,7 @@ export default async function ProjectDetailPage({
           {projectBatches.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
-                <Table className="h-12 w-12 text-stone-400 mx-auto mb-4" />
+                <Table className="h-12 w-12 text-stone-600 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-stone-900 mb-2">No batches yet</h3>
                 <p className="text-stone-600 mb-6">
                   Upload a CSV file with URLs to start testing this workflow
@@ -98,7 +98,7 @@ export default async function ProjectDetailPage({
             <div className="grid gap-4">
               {projectBatches.map((batch) => (
                 <Link key={batch.id} href={`/projects/${params.id}/batches/${batch.id}`}>
-                  <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                  <Card className="hover:shadow-md transition-all duration-200 cursor-pointer">
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>

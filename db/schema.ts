@@ -1,4 +1,5 @@
 import { pgTable, text, uuid, timestamp, jsonb, integer, decimal, boolean } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
 
 // Projects Table
 export const projects = pgTable('projects', {
@@ -43,17 +44,71 @@ export const batches = pgTable('batches', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
-// Executions Table
+// Jobs Table (individual tasks from batch rows)
+export const jobs = pgTable('jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  inputId: text('input_id').notNull(), // Row identifier from CSV
+  siteUrl: text('site_url').notNull(),
+  siteName: text('site_name'),
+  goal: text('goal').notNull(), // Generated from project instructions + row data
+  // Full CSV row data (all input columns)
+  csvRowData: jsonb('csv_row_data').$type<Record<string, any>>(),
+  // Ground truth data from CSV for this job
+  groundTruthData: jsonb('ground_truth_data').$type<Record<string, any>>(),
+  status: text('status').notNull().default('queued'), // queued, running, completed, error, labeled
+  hasGroundTruth: boolean('has_ground_truth').default(false).notNull(),
+  isEvaluated: boolean('is_evaluated').default(false).notNull(),
+  evaluationResult: text('evaluation_result'), // pass, fail
+  lastRunAt: timestamp('last_run_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Sessions Table (execution attempts for a job)
+export const sessions = pgTable('sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }).notNull(),
+  sessionNumber: integer('session_number').notNull(), // #1, #2, #3, etc
+  status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  // Extracted output from AgentQL execution
+  extractedData: jsonb('extracted_data').$type<Record<string, any>>(),
+  rawOutput: text('raw_output'),
+  errorMessage: text('error_message'),
+  failureReason: text('failure_reason'),
+  executionTimeMs: integer('execution_time_ms'),
+  // Screenshot/chapter data for playback
+  screenshots: jsonb('screenshots').$type<Array<{
+    timestamp: string
+    title: string
+    description: string
+    screenshotUrl: string
+  }>>(),
+  streamingUrl: text('streaming_url'), // Live browser stream URL from EVA agent
+  screenshotUrl: text('screenshot_url'), // Final screenshot URL from execution
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+// Executions Table (batch-level execution runs)
 export const executions = pgTable('executions', {
   id: uuid('id').primaryKey().defaultRandom(),
   batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   status: text('status').notNull().default('pending'), // pending, running, completed, failed
   executionType: text('execution_type').notNull().default('test'), // test, production
-  totalSites: integer('total_sites').notNull(),
-  completedSites: integer('completed_sites').default(0).notNull(),
-  successfulSites: integer('successful_sites').default(0).notNull(),
-  failedSites: integer('failed_sites').default(0).notNull(),
+  concurrency: integer('concurrency').default(20).notNull(),
+  totalJobs: integer('total_jobs').notNull(),
+  completedJobs: integer('completed_jobs').default(0).notNull(),
+  runningJobs: integer('running_jobs').default(0).notNull(),
+  queuedJobs: integer('queued_jobs').default(0).notNull(),
+  errorJobs: integer('error_jobs').default(0).notNull(),
+  evaluatedJobs: integer('evaluated_jobs').default(0).notNull(),
+  passedJobs: integer('passed_jobs').default(0).notNull(),
+  failedJobs: integer('failed_jobs').default(0).notNull(),
+  passRate: decimal('pass_rate', { precision: 5, scale: 2 }),
   accuracyPercentage: decimal('accuracy_percentage', { precision: 5, scale: 2 }),
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
   actualCost: decimal('actual_cost', { precision: 10, scale: 2 }),
@@ -108,12 +163,88 @@ export const failurePatterns = pgTable('failure_patterns', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+// Relations
+export const projectsRelations = relations(projects, ({ many }) => ({
+  batches: many(batches),
+  jobs: many(jobs),
+  executions: many(executions),
+}))
+
+export const batchesRelations = relations(batches, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [batches.projectId],
+    references: [projects.id],
+  }),
+  jobs: many(jobs),
+  executions: many(executions),
+}))
+
+export const jobsRelations = relations(jobs, ({ one, many }) => ({
+  batch: one(batches, {
+    fields: [jobs.batchId],
+    references: [batches.id],
+  }),
+  project: one(projects, {
+    fields: [jobs.projectId],
+    references: [projects.id],
+  }),
+  sessions: many(sessions),
+}))
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  job: one(jobs, {
+    fields: [sessions.jobId],
+    references: [jobs.id],
+  }),
+}))
+
+export const executionsRelations = relations(executions, ({ one, many }) => ({
+  batch: one(batches, {
+    fields: [executions.batchId],
+    references: [batches.id],
+  }),
+  project: one(projects, {
+    fields: [executions.projectId],
+    references: [projects.id],
+  }),
+  results: many(executionResults),
+  accuracyMetrics: many(accuracyMetrics),
+  failurePatterns: many(failurePatterns),
+}))
+
+export const executionResultsRelations = relations(executionResults, ({ one }) => ({
+  execution: one(executions, {
+    fields: [executionResults.executionId],
+    references: [executions.id],
+  }),
+}))
+
+export const accuracyMetricsRelations = relations(accuracyMetrics, ({ one }) => ({
+  execution: one(executions, {
+    fields: [accuracyMetrics.executionId],
+    references: [executions.id],
+  }),
+}))
+
+export const failurePatternsRelations = relations(failurePatterns, ({ one }) => ({
+  execution: one(executions, {
+    fields: [failurePatterns.executionId],
+    references: [executions.id],
+  }),
+}))
+
 // Types for TypeScript
 export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
 
 export type Batch = typeof batches.$inferSelect
 export type NewBatch = typeof batches.$inferInsert
+
+export type Job = typeof jobs.$inferSelect
+export type NewJob = typeof jobs.$inferInsert
+
+export type Session = typeof sessions.$inferSelect
+export type NewSession = typeof sessions.$inferInsert
 
 export type Execution = typeof executions.$inferSelect
 export type NewExecution = typeof executions.$inferInsert

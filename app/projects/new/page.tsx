@@ -11,13 +11,13 @@ export default function NewProjectPage() {
   return (
     <div className="min-h-screen bg-stone-50">
       {/* Header */}
-      <div className="border-b border-stone-200 bg-white">
+      <div className="border-b border-stone-200 bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link href="/projects" className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4">
+          <Link href="/projects" className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Projects
           </Link>
-          <h1 className="text-2xl font-bold text-stone-900">Create New Project</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">Create New Project</h1>
           <p className="text-sm text-stone-600 mt-1">
             Define your automation workflow with natural language instructions
           </p>

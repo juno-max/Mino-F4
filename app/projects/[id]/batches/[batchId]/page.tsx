@@ -38,15 +38,15 @@ export default async function BatchDetailPage({
   return (
     <div className="min-h-screen bg-stone-50">
       {/* Header */}
-      <div className="border-b border-stone-200 bg-white">
+      <div className="border-b border-stone-200 bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <Link href={`/projects/${params.id}`} className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4">
+          <Link href={`/projects/${params.id}`} className="inline-flex items-center text-sm text-stone-600 hover:text-stone-900 mb-4 transition-colors">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Project
           </Link>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-stone-900">{batch.name}</h1>
+              <h1 className="text-2xl font-semibold text-stone-900">{batch.name}</h1>
               {batch.description && (
                 <p className="text-sm text-stone-600 mt-1">{batch.description}</p>
               )}
@@ -54,7 +54,7 @@ export default async function BatchDetailPage({
             <RunTestButton
               projectId={params.id}
               batchId={params.batchId}
-              totalSites={batch.totalSites}
+              totalJobs={batch.totalSites}
               hasGroundTruth={batch.hasGroundTruth}
             />
           </div>
@@ -67,25 +67,25 @@ export default async function BatchDetailPage({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-stone-900">{batch.totalSites}</div>
+              <div className="text-2xl font-semibold text-stone-900">{batch.totalSites}</div>
               <div className="text-sm text-stone-600">Total Sites</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-stone-900">{columnSchema.length}</div>
+              <div className="text-2xl font-semibold text-stone-900">{columnSchema.length}</div>
               <div className="text-sm text-stone-600">Columns</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-stone-900">{gtColumns.length}</div>
+              <div className="text-2xl font-semibold text-stone-900">{gtColumns.length}</div>
               <div className="text-sm text-stone-600">Ground Truth Columns</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-stone-900">{batchExecutions.length}</div>
+              <div className="text-2xl font-semibold text-stone-900">{batchExecutions.length}</div>
               <div className="text-sm text-stone-600">Test Runs</div>
             </CardContent>
           </Card>
@@ -102,16 +102,16 @@ export default async function BatchDetailPage({
           <CardContent>
             <div className="space-y-2">
               {columnSchema.map((col, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-stone-50 rounded-md">
+                <div key={idx} className="flex items-center justify-between p-3 bg-stone-50 rounded-md border border-stone-200">
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-stone-900">{col.name}</span>
                     {col.isUrl && (
-                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-amber-800 rounded-full font-medium">
                         URL
                       </span>
                     )}
                     {col.isGroundTruth && (
-                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded-full font-medium">
                         Ground Truth
                       </span>
                     )}
@@ -133,9 +133,9 @@ export default async function BatchDetailPage({
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="border-b-2 border-stone-300">
+                  <tr className="border-b-2 border-stone-200 bg-stone-50">
                     {columnSchema.map((col, idx) => (
-                      <th key={idx} className="text-left p-3 font-semibold text-stone-900 bg-stone-100">
+                      <th key={idx} className="text-left p-3 font-semibold text-xs text-stone-500 uppercase tracking-wider">
                         {col.name}
                         {col.isGroundTruth && <span className="text-green-600 ml-1">✓</span>}
                       </th>
@@ -144,10 +144,10 @@ export default async function BatchDetailPage({
                 </thead>
                 <tbody>
                   {csvData.slice(0, 10).map((row, rowIdx) => (
-                    <tr key={rowIdx} className="border-b border-stone-200 hover:bg-stone-50">
+                    <tr key={rowIdx} className="border-b border-stone-100 hover:bg-stone-50 transition-colors">
                       {columnSchema.map((col, colIdx) => (
-                        <td key={colIdx} className="p-3 text-stone-700 max-w-xs truncate">
-                          {row[col.name] || '-'}
+                        <td key={colIdx} className="p-3 text-stone-900 max-w-xs truncate">
+                          {row[col.name] || <span className="text-stone-600">—</span>}
                         </td>
                       ))}
                     </tr>
@@ -177,22 +177,22 @@ export default async function BatchDetailPage({
                     key={execution.id}
                     href={`/projects/${params.id}/batches/${params.batchId}/executions/${execution.id}`}
                   >
-                    <div className="p-4 border border-stone-200 rounded-md hover:border-amber-500 hover:shadow-sm transition-all cursor-pointer">
+                    <div className="p-4 border border-stone-200 rounded-lg hover:border-amber-400 hover:shadow-md transition-all duration-200 cursor-pointer bg-white">
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-stone-900">
                             {execution.executionType === 'test' ? 'Test Run' : 'Production Run'}
                           </div>
                           <div className="text-sm text-stone-600 mt-1">
-                            {execution.totalSites} sites • {execution.status}
+                            {execution.totalJobs} sites • {execution.status}
                           </div>
                         </div>
                         {execution.accuracyPercentage && (
                           <div className="text-right">
-                            <div className="text-2xl font-bold text-amber-600">
+                            <div className="text-2xl font-semibold text-amber-700">
                               {execution.accuracyPercentage}%
                             </div>
-                            <div className="text-xs text-stone-600">Accuracy</div>
+                            <div className="text-xs text-stone-500">Accuracy</div>
                           </div>
                         )}
                       </div>

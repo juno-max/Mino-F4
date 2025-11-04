@@ -8,14 +8,14 @@ import { Button } from '@/components/ui/button'
 interface RunTestButtonProps {
   projectId: string
   batchId: string
-  totalSites: number
+  totalJobs: number
   hasGroundTruth: boolean
 }
 
-export function RunTestButton({ projectId, batchId, totalSites, hasGroundTruth }: RunTestButtonProps) {
+export function RunTestButton({ projectId, batchId, totalJobs, hasGroundTruth }: RunTestButtonProps) {
   const router = useRouter()
   const [isRunning, setIsRunning] = useState(false)
-  const [selectedSize, setSelectedSize] = useState<number>(Math.min(10, totalSites))
+  const [selectedSize, setSelectedSize] = useState<number>(Math.min(10, totalJobs))
   const [showOptions, setShowOptions] = useState(false)
 
   const handleRunTest = async (sampleSize: number) => {
@@ -28,6 +28,7 @@ export function RunTestButton({ projectId, batchId, totalSites, hasGroundTruth }
         body: JSON.stringify({
           executionType: 'test',
           sampleSize,
+          useAgentQL: true, // ⭐ Enable EVA agent execution
         }),
       })
 
@@ -36,7 +37,7 @@ export function RunTestButton({ projectId, batchId, totalSites, hasGroundTruth }
       }
 
       const execution = await response.json()
-      router.push(`/projects/${projectId}/batches/${batchId}/executions/${execution.id}`)
+      router.push(`/projects/${projectId}/batches/${batchId}/executions/${execution.execution.id}`)
     } catch (error) {
       console.error('Test execution error:', error)
       setIsRunning(false)
@@ -57,11 +58,11 @@ export function RunTestButton({ projectId, batchId, totalSites, hasGroundTruth }
       <div className="flex-1">
         <p className="text-sm font-medium text-stone-900 mb-2">Select Sample Size</p>
         <div className="flex gap-2">
-          {[10, 20, 50].filter(size => size <= totalSites).map(size => (
+          {[10, 20, 50].filter(size => size <= totalJobs).map(size => (
             <button
               key={size}
               onClick={() => setSelectedSize(size)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 selectedSize === size
                   ? 'bg-amber-600 text-white'
                   : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
