@@ -18,7 +18,7 @@ export interface UseWebSocketReturn {
 
 const WS_URL = typeof window !== 'undefined'
   ? `ws://${window.location.hostname}:${window.location.port}/ws`
-  : 'ws://localhost:3000/ws'
+  : 'ws://localhost:3001/ws'
 
 const RECONNECT_DELAY = 3000 // 3 seconds
 const MAX_RECONNECT_ATTEMPTS = 10

@@ -2,7 +2,7 @@ import { db, executions, jobs, sessions } from '@/db'
 import { eq, and, desc } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle, XCircle, AlertCircle, TrendingUp, Eye } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, AlertCircle, TrendingUp, Eye, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 
@@ -66,14 +66,24 @@ export default async function ExecutionResultsPage({
                 {execution.totalJobs} sites • {execution.status}
               </p>
             </div>
-            {isCompleted && accuracyPercentage !== null && (
-              <div className="text-right">
-                <div className="text-4xl font-semibold text-amber-700">
-                  {accuracyPercentage}%
+            <div className="flex items-center gap-4">
+              {(isRunning || execution.status === 'paused') && (
+                <Link href={`/projects/${params.id}/batches/${params.batchId}/executions/${params.executionId}/live`}>
+                  <Button>
+                    <Activity className="h-4 w-4 mr-2" />
+                    Live Monitor
+                  </Button>
+                </Link>
+              )}
+              {isCompleted && accuracyPercentage !== null && (
+                <div className="text-right">
+                  <div className="text-4xl font-semibold text-amber-700">
+                    {accuracyPercentage}%
+                  </div>
+                  <div className="text-sm text-stone-600">Overall Accuracy</div>
                 </div>
-                <div className="text-sm text-stone-600">Overall Accuracy</div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

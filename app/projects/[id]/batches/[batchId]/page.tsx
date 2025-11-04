@@ -6,6 +6,7 @@ import { ArrowLeft, Play, Table } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { RunTestButton } from './RunTestButton'
+import { BatchJobsList } from './BatchJobsList'
 
 export default async function BatchDetailPage({
   params,
@@ -162,6 +163,9 @@ export default async function BatchDetailPage({
             )}
           </CardContent>
         </Card>
+
+        {/* Jobs List */}
+        <BatchJobsList projectId={params.id} batchId={params.batchId} />
 
         {/* Test Executions */}
         {batchExecutions.length > 0 && (
