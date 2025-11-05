@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, executions } from '@/db'
 import { eq } from 'drizzle-orm'
 import { publishExecutionResumed } from '@/lib/execution-events'
+import { resumeExecution } from '@/lib/job-executor'
+import { handleApiError } from '@/lib/api-helpers'
+import { ErrorCodes } from '@/lib/error-codes'
 
 // Enable CORS
 const corsHeaders = {
@@ -22,56 +25,42 @@ export async function POST(
   try {
     const executionId = params.id
 
-    // Get execution to check current status
+    // Use the centralized resume function that actually restarts job processing
+    const result = await resumeExecution(executionId)
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.error,
+          code: result.error?.includes('not found') ? ErrorCodes.NOT_FOUND : ErrorCodes.VALIDATION_ERROR,
+        },
+        { status: result.error?.includes('not found') ? 404 : 400, headers: corsHeaders }
+      )
+    }
+
+    // Get updated execution to return
     const execution = await db.query.executions.findFirst({
       where: eq(executions.id, executionId),
     })
 
-    if (!execution) {
-      return NextResponse.json(
-        { message: 'Execution not found' },
-        { status: 404, headers: corsHeaders }
-      )
-    }
-
-    if (execution.status !== 'paused') {
-      return NextResponse.json(
-        { message: `Cannot resume execution with status: ${execution.status}` },
-        { status: 400, headers: corsHeaders }
-      )
-    }
-
-    // Update execution status to running
-    const now = new Date()
-    const [updatedExecution] = await db
-      .update(executions)
-      .set({
-        status: 'running',
-        resumedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(executions.id, executionId))
-      .returning()
-
     // Publish resume event to WebSocket clients
     publishExecutionResumed({
-      executionId: updatedExecution.id,
+      executionId,
     })
 
-    console.log(`[API] Execution ${executionId} resumed`)
+    console.log(`[API] Execution ${executionId} resumed with ${result.resumedJobs} jobs`)
 
     return NextResponse.json(
       {
         success: true,
-        execution: updatedExecution,
+        execution,
+        resumedJobs: result.resumedJobs,
       },
       { headers: corsHeaders }
     )
   } catch (error: any) {
     console.error('Error resuming execution:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to resume execution' },
-      { status: 500, headers: corsHeaders }
-    )
+    return handleApiError(error)
   }
 }

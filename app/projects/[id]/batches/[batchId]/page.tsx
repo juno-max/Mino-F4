@@ -1,4 +1,4 @@
-import { db, batches, executions } from '@/db'
+import { db, batches, executions, jobs } from '@/db'
 import { eq, desc } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -7,6 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { RunTestButton } from './RunTestButton'
 import { BatchJobsList } from './BatchJobsList'
+import { BulkGTEditor } from './BulkGTEditor'
+import { ColumnMetrics } from './ColumnMetrics'
+import { AccuracyTrendChart } from './AccuracyTrendChart'
+import { ExportButton } from './ExportButton'
 
 export default async function BatchDetailPage({
   params,
@@ -24,6 +28,10 @@ export default async function BatchDetailPage({
   const batchExecutions = await db.query.executions.findMany({
     where: eq(executions.batchId, params.batchId),
     orderBy: [desc(executions.createdAt)],
+  })
+
+  const batchJobs = await db.query.jobs.findMany({
+    where: eq(jobs.batchId, params.batchId),
   })
 
   const columnSchema = batch.columnSchema as Array<{
@@ -52,12 +60,27 @@ export default async function BatchDetailPage({
                 <p className="text-sm text-stone-600 mt-1">{batch.description}</p>
               )}
             </div>
-            <RunTestButton
-              projectId={params.id}
-              batchId={params.batchId}
-              totalJobs={batch.totalSites}
-              hasGroundTruth={batch.hasGroundTruth}
-            />
+            <div className="flex gap-2">
+              {gtColumns.length > 0 && (
+                <>
+                  <Link href={`/projects/${params.id}/batches/${params.batchId}/analytics`}>
+                    <Button variant="outline">
+                      View Analytics
+                    </Button>
+                  </Link>
+                  <ExportButton
+                    batchId={params.batchId}
+                    allColumns={gtColumns.map(c => c.name)}
+                  />
+                </>
+              )}
+              <RunTestButton
+                projectId={params.id}
+                batchId={params.batchId}
+                totalJobs={batch.totalSites}
+                hasGroundTruth={batch.hasGroundTruth}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -123,6 +146,30 @@ export default async function BatchDetailPage({
             </div>
           </CardContent>
         </Card>
+
+        {/* Column-Level Metrics */}
+        {gtColumns.length > 0 && (
+          <ColumnMetrics batchId={params.batchId} />
+        )}
+
+        {/* Accuracy Trend Chart */}
+        {gtColumns.length > 0 && (
+          <AccuracyTrendChart batchId={params.batchId} />
+        )}
+
+        {/* Bulk Ground Truth Editor */}
+        {gtColumns.length > 0 && (
+          <BulkGTEditor
+            batchId={params.batchId}
+            jobs={batchJobs.map(job => ({
+              id: job.id,
+              inputId: job.inputId,
+              siteUrl: job.siteUrl,
+              groundTruthData: job.groundTruthData as Record<string, any> | null,
+            }))}
+            gtColumns={gtColumns}
+          />
+        )}
 
         {/* Data Preview */}
         <Card>

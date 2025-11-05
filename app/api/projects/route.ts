@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, projects } from '@/db'
 import { eq } from 'drizzle-orm'
+import { validateRequest, handleApiError, errorResponse } from '@/lib/api-helpers'
+import { createProjectSchema } from '@/lib/validation-schemas'
 
 // Enable CORS
 const corsHeaders = {
@@ -21,27 +23,21 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json(allProjects, { headers: corsHeaders })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching projects:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to fetch projects' },
-      { status: 500, headers: corsHeaders }
-    )
+    return handleApiError(error)
   }
 }
 
 // POST /api/projects - Create a new project
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { name, description, instructions } = body
-
-    if (!name || !instructions) {
-      return NextResponse.json(
-        { message: 'Name and instructions are required' },
-        { status: 400 }
-      )
+    // Validate request body
+    const validation = await validateRequest(request, createProjectSchema)
+    if (!validation.success) {
+      return validation.response
     }
+    const { name, description, instructions } = validation.data
 
     const [project] = await db.insert(projects).values({
       name,
@@ -50,11 +46,8 @@ export async function POST(request: NextRequest) {
     }).returning()
 
     return NextResponse.json(project, { status: 201, headers: corsHeaders })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating project:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to create project' },
-      { status: 500, headers: corsHeaders }
-    )
+    return handleApiError(error)
   }
 }

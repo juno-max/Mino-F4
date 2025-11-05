@@ -1,24 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, jobs, sessions } from '@/db'
 import { eq, desc } from 'drizzle-orm'
+import { validateRequest, validateParams, handleApiError, notFoundResponse } from '@/lib/api-helpers'
+import { updateJobSchema, jobIdSchema } from '@/lib/validation-schemas'
 
 // GET /api/jobs/[id] - Get job details with all sessions
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Validate params
+    const paramsValidation = await validateParams(params, jobIdSchema)
+    if (!paramsValidation.success) {
+      return paramsValidation.response
+    }
+    const { id } = paramsValidation.data
+
     const job = await db.query.jobs.findFirst({
-      where: eq(jobs.id, params.id),
+      where: eq(jobs.id, id),
     })
 
     if (!job) {
-      return NextResponse.json({ message: 'Job not found' }, { status: 404 })
+      return notFoundResponse('Job')
     }
 
     // Get all sessions for this job
     const jobSessions = await db.query.sessions.findMany({
-      where: eq(sessions.jobId, params.id),
+      where: eq(sessions.jobId, id),
       orderBy: [desc(sessions.createdAt)],
     })
 
@@ -26,28 +35,35 @@ export async function GET(
       ...job,
       sessions: jobSessions,
     })
-  } catch (error: any) {
-    console.error('Get job error:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to get job' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return handleApiError(error)
   }
 }
 
 // PATCH /api/jobs/[id] - Update job status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const body = await request.json()
+    // Validate params
+    const paramsValidation = await validateParams(params, jobIdSchema)
+    if (!paramsValidation.success) {
+      return paramsValidation.response
+    }
+    const { id } = paramsValidation.data
+
+    // Validate request body
+    const bodyValidation = await validateRequest(request, updateJobSchema)
+    if (!bodyValidation.success) {
+      return bodyValidation.response
+    }
     const {
       status,
       groundTruthData,
       isEvaluated,
       evaluationResult,
-    } = body
+    } = bodyValidation.data
 
     const updateData: any = {}
 
@@ -64,19 +80,15 @@ export async function PATCH(
     const [updatedJob] = await db
       .update(jobs)
       .set(updateData)
-      .where(eq(jobs.id, params.id))
+      .where(eq(jobs.id, id))
       .returning()
 
     if (!updatedJob) {
-      return NextResponse.json({ message: 'Job not found' }, { status: 404 })
+      return notFoundResponse('Job')
     }
 
     return NextResponse.json(updatedJob)
-  } catch (error: any) {
-    console.error('Update job error:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to update job' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return handleApiError(error)
   }
 }

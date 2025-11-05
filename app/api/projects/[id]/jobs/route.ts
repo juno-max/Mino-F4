@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, jobs } from '@/db'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and, lt } from 'drizzle-orm'
+import { paginatedResponse } from '@/lib/api-helpers'
 
 // Enable CORS
 const corsHeaders = {
@@ -13,18 +14,35 @@ export async function OPTIONS(request: NextRequest) {
   return NextResponse.json({}, { headers: corsHeaders })
 }
 
-// GET /api/projects/[id]/jobs - Get all jobs for a project
+// GET /api/projects/[id]/jobs?limit=50&cursor=abc123 - Get jobs for a project with pagination
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const searchParams = request.nextUrl.searchParams
+
+    // Parse pagination parameters
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
+    const cursor = searchParams.get('cursor') || null
+
+    // Build where conditions
+    const conditions = [eq(jobs.projectId, params.id)]
+    if (cursor) {
+      conditions.push(lt(jobs.id, cursor))
+    }
+
+    // Fetch jobs (limit + 1 to check for more)
     const allJobs = await db.query.jobs.findMany({
-      where: eq(jobs.projectId, params.id),
+      where: and(...conditions),
       orderBy: [desc(jobs.createdAt)],
+      limit: limit + 1,
     })
 
-    return NextResponse.json(allJobs, { headers: corsHeaders })
+    // Use pagination helper to format response
+    const paginationData = paginatedResponse(allJobs, limit)
+
+    return NextResponse.json(paginationData, { headers: corsHeaders })
   } catch (error: any) {
     console.error('Error fetching jobs:', error)
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, executions } from '@/db'
 import { eq } from 'drizzle-orm'
 import { publishConcurrencyChanged } from '@/lib/execution-events'
+import { validateRequest, validateParams, handleApiError, notFoundResponse } from '@/lib/api-helpers'
+import { updateConcurrencySchema, executionIdSchema } from '@/lib/validation-schemas'
 
 // Enable CORS
 const corsHeaders = {
@@ -17,19 +19,22 @@ export async function OPTIONS(request: NextRequest) {
 // POST /api/executions/[id]/concurrency - Adjust execution concurrency
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const executionId = params.id
-    const body = await request.json()
-    const { concurrency } = body
-
-    if (typeof concurrency !== 'number' || concurrency < 1 || concurrency > 20) {
-      return NextResponse.json(
-        { message: 'Concurrency must be a number between 1 and 20' },
-        { status: 400, headers: corsHeaders }
-      )
+    // Validate route parameters
+    const paramsValidation = await validateParams(params, executionIdSchema)
+    if (!paramsValidation.success) {
+      return paramsValidation.response
     }
+    const { id: executionId } = paramsValidation.data
+
+    // Validate request body
+    const bodyValidation = await validateRequest(request, updateConcurrencySchema)
+    if (!bodyValidation.success) {
+      return bodyValidation.response
+    }
+    const { concurrency } = bodyValidation.data
 
     // Get execution to check current status and concurrency
     const execution = await db.query.executions.findFirst({
@@ -37,21 +42,17 @@ export async function POST(
     })
 
     if (!execution) {
-      return NextResponse.json(
-        { message: 'Execution not found' },
-        { status: 404, headers: corsHeaders }
-      )
+      return notFoundResponse('Execution')
     }
 
     const oldConcurrency = execution.concurrency || 5
 
     // Update execution concurrency
-    const now = new Date()
     const [updatedExecution] = await db
       .update(executions)
       .set({
         concurrency,
-        updatedAt: now,
+        lastActivityAt: new Date(),
       })
       .where(eq(executions.id, executionId))
       .returning()
@@ -73,11 +74,8 @@ export async function POST(
       },
       { headers: corsHeaders }
     )
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error adjusting concurrency:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to adjust concurrency' },
-      { status: 500, headers: corsHeaders }
-    )
+    return handleApiError(error)
   }
 }

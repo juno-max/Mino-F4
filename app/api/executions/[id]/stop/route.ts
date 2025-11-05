@@ -52,7 +52,7 @@ export async function POST(
         stoppedAt: now,
         stopReason: reason,
         completedAt: now,
-        updatedAt: now,
+        lastActivityAt: now,
       })
       .where(eq(executions.id, executionId))
       .returning()

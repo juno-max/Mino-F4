@@ -48,7 +48,7 @@ export async function POST(
       .set({
         status: 'paused',
         pausedAt: now,
-        updatedAt: now,
+        lastActivityAt: now,
       })
       .where(eq(executions.id, executionId))
       .returning()

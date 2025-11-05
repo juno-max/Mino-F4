@@ -5,6 +5,8 @@ import { Clock, CheckCircle, XCircle, Loader2, Eye, Code, Edit, X, MonitorPlay }
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/ui/button'
+import { GroundTruthDiff } from '@/components/GroundTruthDiff'
+import { ScreenshotPlayback } from '@/components/ScreenshotPlayback'
 
 interface JobDetailClientProps {
   job: any
@@ -122,97 +124,54 @@ export default function JobDetailClient({
           </CardContent>
         </Card>
 
-        {/* Input vs Output Side by Side */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Comparison</CardTitle>
-            <CardDescription>Input data from CSV vs Extracted output from website</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Input Data */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-blue-900 bg-blue-50 px-3 py-2 rounded-md">
-                  📥 INPUT DATA (from CSV)
-                </h3>
-                {csvRowData && Object.keys(csvRowData).length > 0 ? (
-                  <div className="space-y-2">
-                    {Object.entries(csvRowData).map(([key, value]) => (
-                      <div key={key} className="border border-blue-200 rounded-md p-3 bg-blue-50/50">
-                        <div className="text-xs font-medium text-blue-600 uppercase mb-1">{key}</div>
-                        <div className="text-sm text-blue-900 font-mono break-all">
-                          {value != null ? String(value) : <span className="text-blue-400">—</span>}
-                        </div>
-                      </div>
-                    ))}
+        {/* Input Data */}
+        {csvRowData && Object.keys(csvRowData).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Input Data</CardTitle>
+              <CardDescription>Data from CSV input</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {Object.entries(csvRowData).map(([key, value]) => (
+                  <div key={key} className="border border-blue-200 rounded-md p-3 bg-blue-50/50">
+                    <div className="text-xs font-medium text-blue-600 uppercase mb-1">{key}</div>
+                    <div className="text-sm text-blue-900 font-mono break-all">
+                      {value != null ? String(value) : <span className="text-blue-400">—</span>}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-stone-500 italic">No input data</p>
-                )}
+                ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
 
-              {/* Output Data */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-green-900 bg-green-50 px-3 py-2 rounded-md">
-                  📤 OUTPUT DATA (extracted from website)
-                </h3>
-                {extractedData && Object.keys(extractedData).length > 0 ? (
-                  <div className="space-y-2">
-                    {Object.entries(extractedData).map(([key, value]) => {
-                      // Check if matches ground truth
-                      const gtValue = groundTruthData?.[key]
-                      const isMatch = gtValue != null && String(gtValue).toLowerCase().trim() === String(value).toLowerCase().trim()
-                      const hasTruth = gtValue != null
-
-                      return (
-                        <div
-                          key={key}
-                          className={`border rounded-md p-3 ${
-                            hasTruth
-                              ? isMatch
-                                ? 'border-green-300 bg-green-50/50'
-                                : 'border-red-300 bg-red-50/50'
-                              : 'border-green-200 bg-green-50/50'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <div className="text-xs font-medium text-green-600 uppercase mb-1">{key}</div>
-                              <div className="text-sm text-green-900 font-mono break-all">
-                                {value != null ? String(value) : <span className="text-green-400">—</span>}
-                              </div>
-                            </div>
-                            {hasTruth && (
-                              <div>
-                                {isMatch ? (
-                                  <CheckCircle className="h-5 w-5 text-green-600" />
-                                ) : (
-                                  <XCircle className="h-5 w-5 text-red-600" />
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          {hasTruth && !isMatch && (
-                            <div className="mt-2 pt-2 border-t border-red-200">
-                              <div className="text-xs text-red-700">
-                                Expected: <span className="font-mono">{String(gtValue)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-stone-500">
-                    <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin opacity-50" />
-                    <p className="text-sm">Waiting for data extraction...</p>
-                  </div>
-                )}
+        {/* Ground Truth Comparison */}
+        {extractedData && Object.keys(extractedData).length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Extraction Results</CardTitle>
+              <CardDescription>
+                {groundTruthData ? 'Comparing extracted data with ground truth' : 'Extracted data from website'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GroundTruthDiff
+                extractedData={extractedData}
+                groundTruthData={groundTruthData}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-8 text-stone-500">
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin opacity-50" />
+                <p className="text-sm">Waiting for data extraction...</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Live Stream or Execution Logs */}
         {sessions.length > 0 && (
@@ -291,6 +250,14 @@ export default function JobDetailClient({
                           <span>•</span>
                           <span>Watching agent execute in real-time</span>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Screenshot Playback for completed sessions */}
+                    {(session.status === 'completed' || session.status === 'failed') && session.screenshots && Array.isArray(session.screenshots) && session.screenshots.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-stone-900 mb-3">Execution Playback</h4>
+                        <ScreenshotPlayback screenshots={session.screenshots} />
                       </div>
                     )}
 

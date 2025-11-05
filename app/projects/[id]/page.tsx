@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, Plus, Table, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { formatDistance } from 'date-fns'
+import { InstructionVersions } from '@/components/InstructionVersions'
 
 export default async function ProjectDetailPage({
   params,
@@ -65,6 +66,12 @@ export default async function ProjectDetailPage({
             </pre>
           </CardContent>
         </Card>
+
+        {/* Instruction Version History */}
+        <InstructionVersions
+          projectId={params.id}
+          currentInstructions={project.instructions}
+        />
 
         {/* Batches */}
         <div>
