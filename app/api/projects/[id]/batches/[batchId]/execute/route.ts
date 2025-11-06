@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, batches, executions, jobs, sessions, projects } from '@/db'
 import { eq, desc } from 'drizzle-orm'
 import { executeEvaWorkflow } from '@/lib/eva-executor'
+import {
+  publishExecutionStarted,
+  publishJobStarted,
+  publishJobProgress,
+  publishJobCompleted,
+  publishJobFailed,
+  publishExecutionStatsUpdated,
+  publishExecutionCompleted,
+} from '@/lib/execution-events'
+import { createMetricsSnapshot } from '@/lib/metrics-snapshot'
+import { validateRequest, validateParams, handleApiError, notFoundResponse } from '@/lib/api-helpers'
+import { executeSchema, projectBatchParamsSchema } from '@/lib/validation-schemas'
+import { createConcurrencyController, type ConcurrencyController } from '@/lib/concurrency-control'
+import { withRetry, RetryPresets } from '@/lib/retry-logic'
 
 // Enable CORS
 const corsHeaders = {
@@ -16,27 +30,38 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; batchId: string } }
+  { params }: { params: Promise<{ id: string; batchId: string }> }
 ) {
   try {
-    const body = await request.json()
-    const { executionType = 'test', sampleSize = 10, useAgentQL = false } = body
+    // Validate route parameters
+    const paramsValidation = await validateParams(params, projectBatchParamsSchema)
+    if (!paramsValidation.success) {
+      return paramsValidation.response
+    }
+    const { id: projectId, batchId } = paramsValidation.data
+
+    // Validate request body
+    const bodyValidation = await validateRequest(request, executeSchema)
+    if (!bodyValidation.success) {
+      return bodyValidation.response
+    }
+    const { executionType, sampleSize, useAgentQL, concurrency = 5 } = bodyValidation.data
 
     // Get batch and project
     const batch = await db.query.batches.findFirst({
-      where: eq(batches.id, params.batchId),
+      where: eq(batches.id, batchId),
     })
 
     if (!batch) {
-      return NextResponse.json({ message: 'Batch not found' }, { status: 404 })
+      return notFoundResponse('Batch')
     }
 
     const project = await db.query.projects.findFirst({
-      where: eq(projects.id, params.id),
+      where: eq(projects.id, projectId),
     })
 
     if (!project) {
-      return NextResponse.json({ message: 'Project not found' }, { status: 404 })
+      return notFoundResponse('Project')
     }
 
     const columnSchema = batch.columnSchema as any[]
@@ -44,7 +69,7 @@ export async function POST(
 
     // Check if there are existing jobs for this batch
     const existingJobs = await db.query.jobs.findMany({
-      where: eq(jobs.batchId, params.batchId),
+      where: eq(jobs.batchId, batchId),
     })
 
     // If jobs already exist, reset them for re-execution
@@ -54,7 +79,7 @@ export async function POST(
       // Reset all jobs to queued status
       await db.update(jobs)
         .set({ status: 'queued', lastRunAt: null })
-        .where(eq(jobs.batchId, params.batchId))
+        .where(eq(jobs.batchId, batchId))
 
       console.log('[Execute] Reset', existingJobs.length, 'jobs to queued status')
       // Continue with execution using existing jobs
@@ -88,8 +113,9 @@ export async function POST(
         const goal = generateGoal(project.instructions, siteData, columnSchema)
 
         const [job] = await db.insert(jobs).values({
-          batchId: params.batchId,
-          projectId: params.id,
+          organizationId: batch.organizationId,
+          batchId,
+          projectId,
           inputId: siteData.id || siteData.name || siteUrl,
           siteUrl,
           siteName: siteData.name || null,
@@ -106,8 +132,8 @@ export async function POST(
 
     // Create execution record
     const [execution] = await db.insert(executions).values({
-      batchId: params.batchId,
-      projectId: params.id,
+      batchId,
+      projectId,
       status: 'running',
       executionType,
       totalJobs: jobsToExecute.length,
@@ -116,32 +142,32 @@ export async function POST(
       queuedJobs: jobsToExecute.length,
       errorJobs: 0,
       startedAt: new Date(),
+      concurrency,
     }).returning()
 
+    // Publish execution started event
+    publishExecutionStarted({
+      executionId: execution.id,
+      batchId,
+      projectId,
+      totalJobs: jobsToExecute.length,
+      concurrency,
+      executionType,
+    })
+
     // Run execution asynchronously with EVA agent
-    if (useAgentQL) {
-      console.log('[Execute] Starting EVA agent execution for', jobsToExecute.length, 'jobs')
-      // Start execution in background - don't await to avoid blocking response
-      executeEvaJobs(execution.id, jobsToExecute, project.instructions, columnSchema)
-        .catch(err => console.error('[Execute] Background execution error:', err))
-    } else {
-      // Use mock executor for testing
-      console.log('[Execute] Starting mock execution for', jobsToExecute.length, 'jobs')
-      const { executeBatchMock } = await import('@/lib/mock-executor')
-      executeMockJobs(execution.id, jobsToExecute, columnSchema)
-        .catch(err => console.error('[Execute] Mock execution error:', err))
-    }
+    console.log('[Execute] Starting EVA agent execution for', jobsToExecute.length, 'jobs')
+    // Start execution in background - don't await to avoid blocking response
+    executeEvaJobs(execution.id, jobsToExecute, project.instructions, columnSchema)
+      .catch(err => console.error('[Execute] Background execution error:', err))
 
     return NextResponse.json({
       execution,
       jobs: jobsToExecute,
     }, { headers: corsHeaders })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Execution error:', error)
-    return NextResponse.json(
-      { message: error.message || 'Failed to start execution' },
-      { status: 500, headers: corsHeaders }
-    )
+    return handleApiError(error)
   }
 }
 
@@ -173,184 +199,273 @@ async function executeEvaJobs(
   console.log('[executeEvaJobs] Execution ID:', executionId)
 
   try {
-    for (const job of jobsList) {
-      console.log('[executeEvaJobs] Processing job:', job.id, 'URL:', job.siteUrl)
-      const startTime = Date.now()
+    // Get execution record to retrieve concurrency setting
+    const execution = await db.query.executions.findFirst({
+      where: eq(executions.id, executionId),
+    })
 
-      // Update job status to running
-      await db.update(jobs).set({ status: 'running', lastRunAt: new Date() }).where(eq(jobs.id, job.id))
-      console.log('[executeEvaJobs] Job', job.id, 'status updated to running')
+    if (!execution) {
+      throw new Error('Execution record not found')
+    }
 
-      // Update execution stats
-      await db.update(executions).set({
-        runningJobs: 1,
-        queuedJobs: jobsList.length - jobsList.indexOf(job) - 1,
-      }).where(eq(executions.id, executionId))
+    // Create concurrency controller with execution's concurrency setting
+    const concurrency = execution.concurrency || 5
+    const controller = createConcurrencyController(concurrency)
+    console.log(`[executeEvaJobs] Concurrency controller created with limit: ${concurrency}`)
 
-      // Create session
-      const sessionNumber = 1 // First attempt
-      const [session] = await db.insert(sessions).values({
-        jobId: job.id,
-        sessionNumber,
-        status: 'running',
-        startedAt: new Date(),
-      }).returning()
+    // Shared state for tracking execution progress
+    let completedCount = 0
+    let errorCount = 0
+    const statsLock = { updating: false }
 
-      // Execute with EVA
+    // Helper function to update execution stats atomically
+    const updateExecutionStats = async () => {
+      if (statsLock.updating) return
+      statsLock.updating = true
+
       try {
-        console.log('[executeEvaJobs] Calling executeEvaWorkflow for job:', job.id)
+        const activeCount = controller.getActiveCount()
+        const pendingCount = controller.getPendingCount()
 
-        const result = await executeEvaWorkflow(
-          job.siteUrl,
-          projectInstructions,
-          columnSchema,
-          job.groundTruthData,
-          async (url) => {
-            // Store streaming URL in session for live browser view
-            console.log(`[executeEvaJobs] Job ${job.id}: Live browser stream available at ${url}`)
-            await db.update(sessions).set({
-              streamingUrl: url
-            }).where(eq(sessions.id, session.id))
-          }
-        )
-
-        console.log('[executeEvaJobs] EVA workflow completed for job:', job.id, 'Error:', result.error || 'none')
-
-        const executionTimeMs = Date.now() - startTime
-
-        // Update session with results
-        await db.update(sessions).set({
-          status: result.error ? 'failed' : 'completed',
-          extractedData: result.extractedData,
-          rawOutput: result.logs.join('\n'),
-          errorMessage: result.error,
-          failureReason: result.error ? 'EVA execution error' : null,
-          executionTimeMs,
-          completedAt: new Date(),
-        }).where(eq(sessions.id, session.id))
-
-        // Calculate accuracy metrics
-        let isAccurate: boolean | null = null
-        if (result.accuracy) {
-          isAccurate = result.accuracy.accuracyScore === 100
-        }
-
-        // Update job status
-        const jobStatus = result.error ? 'error' : 'completed'
-        await db.update(jobs).set({
-          status: jobStatus,
-          isEvaluated: isAccurate !== null,
-          evaluationResult: isAccurate === true ? 'pass' : isAccurate === false ? 'fail' : null,
-        }).where(eq(jobs.id, job.id))
-
-        // Update execution stats
-        const completedJobs = jobsList.indexOf(job) + 1
-        const errorJobs = result.error ? 1 : 0
         await db.update(executions).set({
-          completedJobs,
-          runningJobs: 0,
-          errorJobs,
+          completedJobs: completedCount,
+          errorJobs: errorCount,
+          runningJobs: activeCount,
+          queuedJobs: pendingCount,
+          lastActivityAt: new Date(),
         }).where(eq(executions.id, executionId))
 
-      } catch (error: any) {
-        console.error(`Job ${job.id} EVA execution error:`, error)
-
-        const executionTimeMs = Date.now() - startTime
-
-        // Update session as failed
-        await db.update(sessions).set({
-          status: 'failed',
-          errorMessage: error.message,
-          failureReason: 'EVA execution error',
-          executionTimeMs,
-          completedAt: new Date(),
-        }).where(eq(sessions.id, session.id))
-
-        // Update job as error
-        await db.update(jobs).set({
-          status: 'error',
-        }).where(eq(jobs.id, job.id))
+        // Publish stats update event
+        publishExecutionStatsUpdated({
+          executionId,
+          stats: {
+            totalJobs: jobsList.length,
+            completedJobs: completedCount,
+            runningJobs: activeCount,
+            queuedJobs: pendingCount,
+            errorJobs: errorCount,
+          },
+        })
+      } finally {
+        statsLock.updating = false
       }
     }
 
+    // Process each job concurrently with retry logic
+    const jobPromises = jobsList.map((job, index) =>
+      controller.run(async () => {
+        console.log('[executeEvaJobs] Processing job:', job.id, 'URL:', job.siteUrl)
+        const startTime = Date.now()
+
+        // Update job status to running
+        await db.update(jobs).set({
+          status: 'running',
+          lastRunAt: new Date(),
+          startedAt: new Date(),
+          progressPercentage: 0,
+        }).where(eq(jobs.id, job.id))
+        console.log('[executeEvaJobs] Job', job.id, 'status updated to running')
+
+        // Publish job started event
+        publishJobStarted({
+          executionId,
+          jobId: job.id,
+          batchId: job.batchId,
+          siteUrl: job.siteUrl,
+          siteName: job.siteName,
+          goal: job.goal,
+        })
+
+        // Update execution stats
+        await updateExecutionStats()
+
+        // Create session
+        const sessionNumber = 1 // First attempt
+        const [session] = await db.insert(sessions).values({
+          jobId: job.id,
+          sessionNumber,
+          status: 'running',
+          startedAt: new Date(),
+        }).returning()
+
+        // Execute with EVA using retry logic
+        try {
+          console.log('[executeEvaJobs] Calling executeEvaWorkflow for job:', job.id)
+
+          // Wrap EVA workflow execution with retry logic
+          const retryResult = await withRetry(
+            async () => {
+              return await executeEvaWorkflow(
+                job.siteUrl,
+                projectInstructions,
+                columnSchema,
+                job.groundTruthData,
+                async (url) => {
+                  // Store streaming URL in session for live browser view
+                  console.log(`[executeEvaJobs] Job ${job.id}: Live browser stream available at ${url}`)
+                  await db.update(sessions).set({
+                    streamingUrl: url
+                  }).where(eq(sessions.id, session.id))
+                }
+              )
+            },
+            {
+              ...RetryPresets.PATIENT,
+              onRetry: (error, attempt) => {
+                console.log(`[executeEvaJobs] Job ${job.id} retry attempt ${attempt}:`, error.message)
+                // Update session to track retry attempts
+                db.update(sessions).set({
+                  errorMessage: `Retry attempt ${attempt}: ${error.message}`,
+                }).where(eq(sessions.id, session.id))
+              },
+            }
+          )
+
+          const executionTimeMs = Date.now() - startTime
+
+          // Check if retry was successful
+          if (retryResult.success && retryResult.data) {
+            const result = retryResult.data
+            console.log('[executeEvaJobs] EVA workflow completed for job:', job.id, 'Attempts:', retryResult.attempts, 'Error:', result.error || 'none')
+
+            // Update session with results
+            await db.update(sessions).set({
+              status: result.error ? 'failed' : 'completed',
+              extractedData: result.extractedData,
+              rawOutput: result.logs.join('\n'),
+              errorMessage: result.error,
+              failureReason: result.error ? 'EVA execution error' : null,
+              executionTimeMs,
+              completedAt: new Date(),
+            }).where(eq(sessions.id, session.id))
+
+            // Calculate accuracy metrics
+            let isAccurate: boolean | null = null
+            if (result.accuracy) {
+              isAccurate = result.accuracy.accuracyScore === 100
+            }
+
+            // Update job status
+            const jobStatus = result.error ? 'error' : 'completed'
+            await db.update(jobs).set({
+              status: jobStatus,
+              isEvaluated: isAccurate !== null,
+              evaluationResult: isAccurate === true ? 'pass' : isAccurate === false ? 'fail' : null,
+              completedAt: new Date(),
+              progressPercentage: 100,
+              executionDurationMs: executionTimeMs,
+            }).where(eq(jobs.id, job.id))
+
+            // Update counters
+            completedCount++
+            if (result.error) {
+              errorCount++
+            }
+
+            // Publish job completion event
+            if (result.error) {
+              publishJobFailed({
+                executionId,
+                jobId: job.id,
+                status: 'error',
+                errorMessage: result.error,
+                failureReason: 'EVA execution error',
+              })
+            } else {
+              publishJobCompleted({
+                executionId,
+                jobId: job.id,
+                status: 'completed',
+                duration: executionTimeMs,
+                extractedData: result.extractedData,
+                isEvaluated: isAccurate !== null,
+                evaluationResult: isAccurate === true ? 'pass' : isAccurate === false ? 'fail' : undefined,
+              })
+            }
+
+            // Update execution stats
+            await updateExecutionStats()
+          } else {
+            // All retries failed
+            throw retryResult.error || new Error('Execution failed after retries')
+          }
+
+        } catch (error: any) {
+          console.error(`Job ${job.id} EVA execution error after retries:`, error)
+
+          const executionTimeMs = Date.now() - startTime
+
+          // Update session as failed
+          await db.update(sessions).set({
+            status: 'failed',
+            errorMessage: error.message,
+            failureReason: 'EVA execution error',
+            executionTimeMs,
+            completedAt: new Date(),
+          }).where(eq(sessions.id, session.id))
+
+          // Update job as error
+          await db.update(jobs).set({
+            status: 'error',
+            completedAt: new Date(),
+            executionDurationMs: executionTimeMs,
+          }).where(eq(jobs.id, job.id))
+
+          // Update counters
+          completedCount++
+          errorCount++
+
+          // Publish job failed event
+          publishJobFailed({
+            executionId,
+            jobId: job.id,
+            status: 'error',
+            errorMessage: error.message,
+            failureReason: 'EVA execution error',
+          })
+
+          // Update execution stats
+          await updateExecutionStats()
+        }
+      })
+    )
+
+    // Wait for all jobs to complete
+    console.log('[executeEvaJobs] Waiting for all jobs to complete...')
+    await Promise.allSettled(jobPromises)
+    console.log('[executeEvaJobs] All jobs completed')
+
     // Mark execution as completed
     await db.update(executions).set({
       status: 'completed',
       completedAt: new Date(),
+      completedJobs: completedCount,
+      errorJobs: errorCount,
+      runningJobs: 0,
+      queuedJobs: 0,
     }).where(eq(executions.id, executionId))
+
+    // Auto-create metrics snapshot for tracking accuracy over time
+    await createMetricsSnapshot(executionId)
+
+    // Publish execution completed event
+    const finalExecution = await db.query.executions.findFirst({
+      where: eq(executions.id, executionId),
+    })
+    if (finalExecution) {
+      publishExecutionCompleted({
+        executionId,
+        completedJobs: finalExecution.completedJobs,
+        totalJobs: finalExecution.totalJobs,
+        passRate: finalExecution.passRate ? Number(finalExecution.passRate) : undefined,
+        duration: finalExecution.startedAt && finalExecution.completedAt
+          ? finalExecution.completedAt.getTime() - finalExecution.startedAt.getTime()
+          : 0,
+      })
+    }
 
   } catch (error) {
     console.error('EVA execution error:', error)
-    await db.update(executions).set({
-      status: 'failed',
-      completedAt: new Date(),
-    }).where(eq(executions.id, executionId))
-  }
-}
-
-async function executeMockJobs(
-  executionId: string,
-  jobsList: any[],
-  columnSchema: any[]
-) {
-  const { executeBatchMock } = await import('@/lib/mock-executor')
-
-  try {
-    for (const job of jobsList) {
-      // Update job status to running
-      await db.update(jobs).set({ status: 'running', lastRunAt: new Date() }).where(eq(jobs.id, job.id))
-
-      // Create session
-      const [session] = await db.insert(sessions).values({
-        jobId: job.id,
-        sessionNumber: 1,
-        status: 'running',
-        startedAt: new Date(),
-      }).returning()
-
-      // Execute mock
-      const { executeMockWorkflow } = await import('@/lib/mock-executor')
-      const result = await executeMockWorkflow(
-        job.siteUrl,
-        columnSchema,
-        job.groundTruthData
-      )
-
-      // Update session with results
-      await db.update(sessions).set({
-        status: result.failureReason ? 'failed' : 'completed',
-        extractedData: result.extractedData,
-        rawOutput: JSON.stringify(result.extractedData),
-        errorMessage: result.failureReason,
-        failureReason: result.failureReason,
-        executionTimeMs: result.executionTimeMs,
-        completedAt: new Date(),
-      }).where(eq(sessions.id, session.id))
-
-      // Update job status
-      const jobStatus = result.failureReason ? 'error' : 'completed'
-      await db.update(jobs).set({
-        status: jobStatus,
-        isEvaluated: result.isAccurate !== null,
-        evaluationResult: result.isAccurate ? 'pass' : 'fail',
-      }).where(eq(jobs.id, job.id))
-
-      // Update execution stats
-      const completedJobs = jobsList.indexOf(job) + 1
-      await db.update(executions).set({
-        completedJobs,
-        runningJobs: 0,
-      }).where(eq(executions.id, executionId))
-    }
-
-    // Mark execution as completed
-    await db.update(executions).set({
-      status: 'completed',
-      completedAt: new Date(),
-    }).where(eq(executions.id, executionId))
-
-  } catch (error) {
-    console.error('Mock execution error:', error)
     await db.update(executions).set({
       status: 'failed',
       completedAt: new Date(),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, batches, projects } from '@/db'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, lt, desc } from 'drizzle-orm'
+import { paginatedResponse } from '@/lib/api-helpers'
 
 // Enable CORS
 const corsHeaders = {
@@ -13,7 +14,7 @@ export async function OPTIONS(request: NextRequest) {
   return NextResponse.json({}, { headers: corsHeaders })
 }
 
-// GET /api/batches?project_id={id} - List batches for a project
+// GET /api/batches?project_id={id}&limit=50&cursor=abc123 - List batches for a project with pagination
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -26,12 +27,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Parse pagination parameters
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
+    const cursor = searchParams.get('cursor') || null
+
+    // Build where conditions
+    const conditions = [eq(batches.projectId, projectId)]
+    if (cursor) {
+      conditions.push(lt(batches.id, cursor))
+    }
+
+    // Fetch batches (limit + 1 to check for more)
     const projectBatches = await db.query.batches.findMany({
-      where: eq(batches.projectId, projectId),
+      where: and(...conditions),
       orderBy: (batches, { desc }) => [desc(batches.createdAt)],
+      limit: limit + 1,
     })
 
-    return NextResponse.json(projectBatches, { headers: corsHeaders })
+    // Use pagination helper to format response
+    const paginationData = paginatedResponse(projectBatches, limit)
+
+    return NextResponse.json(paginationData, { headers: corsHeaders })
   } catch (error: any) {
     console.error('Error fetching batches:', error)
     return NextResponse.json(
@@ -112,6 +128,7 @@ export async function POST(request: NextRequest) {
     const hasGroundTruth = gtColumns.length > 0
 
     const [batch] = await db.insert(batches).values({
+      organizationId: project.organizationId,
       projectId: project_id,
       name,
       description: goal || null,

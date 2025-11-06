@@ -1,12 +1,17 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import Providers from '@/components/Providers'
+import TopNav from '@/components/navigation/TopNav'
+import LeftSidebar from '@/components/navigation/LeftSidebar'
+import LayoutWrapper from '@/components/navigation/LayoutWrapper'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'MINO - Web Automation Platform',
-  description: 'Enterprise web automation with ground truth validation',
+  title: 'MINO F4 - AI-Powered Web Automation Platform',
+  description: 'Enterprise web automation with EVA Agent, real-time monitoring, and multi-tenant architecture',
 }
 
 export default function RootLayout({
@@ -16,7 +21,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <Providers>
+          {children}
+        </Providers>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+          toastOptions={{
+            style: {
+              fontFamily: inter.style.fontFamily,
+            },
+          }}
+        />
+      </body>
     </html>
   )
 }

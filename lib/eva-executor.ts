@@ -328,6 +328,7 @@ export async function executeEvaWorkflow(
   columnSchema: any[],
   groundTruthData: Record<string, any> | null,
   onStreamingUrl?: (url: string) => void,
+  onProgress?: (progress: number, step: string) => void,
 ): Promise<ExecutionResult> {
   const logs: string[] = [];
   const runId = `run_${Date.now()}`;
@@ -342,6 +343,8 @@ export async function executeEvaWorkflow(
   try {
     let finalResult: Record<string, unknown> | null = null;
     let lastStreamingUrl: string | null = null;
+    let eventCount = 0;
+    let estimatedTotalEvents = 20; // Rough estimate for progress calculation
 
     for await (const result of executeEvaRun({
       runId,
@@ -350,6 +353,11 @@ export async function executeEvaWorkflow(
       goal,
     })) {
       if (result.status === 'running') {
+        eventCount++;
+
+        // Calculate progress (cap at 90% until completion)
+        const progress = Math.min(90, Math.floor((eventCount / estimatedTotalEvents) * 90));
+
         if (result.streamingUrl && result.streamingUrl !== lastStreamingUrl) {
           lastStreamingUrl = result.streamingUrl;
           logs.push(`Live browser stream: ${result.streamingUrl}`);
@@ -365,20 +373,47 @@ export async function executeEvaWorkflow(
           }
         }
 
-        // Log event details
+        // Report progress
+        let currentStep = 'Processing';
         if (result.event.content?.parts) {
           for (const part of result.event.content.parts) {
             if (part.text) {
               logs.push(`EVA: ${part.text}`);
+              currentStep = part.text.substring(0, 50); // First 50 chars as step
             }
             if (part.functionCall) {
-              logs.push(`Tool call: ${part.functionCall.name}`);
+              const toolName = part.functionCall.name;
+              logs.push(`Tool call: ${toolName}`);
+              if (toolName === VISIT_URL_TOOL_NAME) {
+                currentStep = 'Navigating to URL';
+              } else {
+                currentStep = `Executing: ${toolName}`;
+              }
             }
           }
         }
+
+        // Call progress callback
+        if (onProgress) {
+          try {
+            await onProgress(progress, currentStep);
+          } catch (error) {
+            console.error('Error in progress callback:', error);
+          }
+        }
+
       } else if (result.status === 'completed') {
         finalResult = result.resultJson;
         logs.push('EVA agent completed successfully');
+
+        // Report 100% progress
+        if (onProgress) {
+          try {
+            await onProgress(100, 'Completed');
+          } catch (error) {
+            console.error('Error in progress callback:', error);
+          }
+        }
       } else if (result.status === 'failed') {
         logs.push(`EVA agent failed: ${result.error}`);
         return {

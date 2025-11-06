@@ -1,0 +1,4 @@
+- always use executeevarun correctly for Mino updates!
+- always use the fintech UI and design principles for Mino frontend updates!
+- always make sure websocket errors and runtime errors are fixed and tested before you tell me things are production-ready!
+- apply consistent design principles wherever requires UI, transition animation, user experience: Progressive Disclosure, Maximum Density, Minimum Friction

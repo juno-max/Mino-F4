@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createBatchFromCSV } from '@/app/projects/[id]/batches/actions'
+import { createBatchFromCSV } from '@/app/(authenticated)/projects/[id]/batches/actions'
 
 export async function POST(
   request: NextRequest,

@@ -1,9 +1,13 @@
-import { pgTable, text, uuid, timestamp, jsonb, integer, decimal, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, text, uuid, timestamp, jsonb, integer, decimal, boolean, real, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
+
+// Re-export all auth schema tables and relations
+export * from './auth-schema'
 
 // Projects Table
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   name: text('name').notNull(),
   description: text('description'),
   instructions: text('instructions').notNull(),
@@ -25,6 +29,7 @@ export const instructionVersions = pgTable('instruction_versions', {
 // Batches Table - Flexible JSONB schema
 export const batches = pgTable('batches', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: text('name').notNull(),
   description: text('description'),
@@ -40,6 +45,9 @@ export const batches = pgTable('batches', {
   hasGroundTruth: boolean('has_ground_truth').default(false).notNull(),
   groundTruthColumns: text('ground_truth_columns').array(),
   totalSites: integer('total_sites').notNull(),
+  // Ground truth metrics caching
+  lastGtMetricsCalculation: timestamp('last_gt_metrics_calculation'),
+  overallAccuracy: real('overall_accuracy'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -47,6 +55,7 @@ export const batches = pgTable('batches', {
 // Jobs Table (individual tasks from batch rows)
 export const jobs = pgTable('jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   inputId: text('input_id').notNull(), // Row identifier from CSV
@@ -57,10 +66,36 @@ export const jobs = pgTable('jobs', {
   csvRowData: jsonb('csv_row_data').$type<Record<string, any>>(),
   // Ground truth data from CSV for this job
   groundTruthData: jsonb('ground_truth_data').$type<Record<string, any>>(),
+  // Ground truth metadata tracking
+  groundTruthMetadata: jsonb('ground_truth_metadata').$type<{
+    setBy: 'manual' | 'bulk_import' | 'auto_detected' | 'api'
+    setAt: string // ISO timestamp
+    source: string // CSV column name or 'manual_entry'
+    confidence: number // 0-1 for auto-detected values
+    verifiedBy?: string // User ID who verified
+    verifiedAt?: string
+  }>(),
   status: text('status').notNull().default('queued'), // queued, running, completed, error, labeled
+  // Granular status tracking for better UX
+  detailedStatus: text('detailed_status'), // completed, partial, blocked, timeout, failed, validation_failed, not_found
+  blockedReason: text('blocked_reason'), // captcha, login_required, paywall, geo_blocked, rate_limited, cloudflare
+  fieldsExtracted: text('fields_extracted').array(), // List of successfully extracted field names
+  fieldsMissing: text('fields_missing').array(), // List of fields that failed to extract
+  completionPercentage: integer('completion_percentage').default(0), // 0-100 percentage of fields extracted
+  failureCategory: text('failure_category'), // extraction_failed, page_error, network_error, timeout, blocked
   hasGroundTruth: boolean('has_ground_truth').default(false).notNull(),
   isEvaluated: boolean('is_evaluated').default(false).notNull(),
   evaluationResult: text('evaluation_result'), // pass, fail
+  // Live tracking fields for real-time monitoring
+  currentStep: text('current_step'),
+  currentUrl: text('current_url'),
+  progressPercentage: integer('progress_percentage').default(0).notNull(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  executionDurationMs: integer('execution_duration_ms'),
+  retryCount: integer('retry_count').default(0).notNull(),
+  retryReason: text('retry_reason'),
+  // Timestamps
   lastRunAt: timestamp('last_run_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -72,6 +107,12 @@ export const sessions = pgTable('sessions', {
   jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }).notNull(),
   sessionNumber: integer('session_number').notNull(), // #1, #2, #3, etc
   status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  // Granular status tracking for better UX
+  detailedStatus: text('detailed_status'), // completed, partial, blocked, timeout, failed, validation_failed, not_found
+  blockedReason: text('blocked_reason'), // captcha, login_required, paywall, geo_blocked, rate_limited, cloudflare
+  fieldsExtracted: text('fields_extracted').array(), // List of successfully extracted field names
+  fieldsMissing: text('fields_missing').array(), // List of fields that failed to extract
+  completionPercentage: integer('completion_percentage').default(0), // 0-100 percentage of fields extracted
   // Extracted output from AgentQL execution
   extractedData: jsonb('extracted_data').$type<Record<string, any>>(),
   rawOutput: text('raw_output'),
@@ -97,9 +138,9 @@ export const executions = pgTable('executions', {
   id: uuid('id').primaryKey().defaultRandom(),
   batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  status: text('status').notNull().default('pending'), // pending, running, completed, failed, paused, stopped
   executionType: text('execution_type').notNull().default('test'), // test, production
-  concurrency: integer('concurrency').default(20).notNull(),
+  concurrency: integer('concurrency').default(5).notNull(), // Changed default from 20 to 5
   totalJobs: integer('total_jobs').notNull(),
   completedJobs: integer('completed_jobs').default(0).notNull(),
   runningJobs: integer('running_jobs').default(0).notNull(),
@@ -112,10 +153,108 @@ export const executions = pgTable('executions', {
   accuracyPercentage: decimal('accuracy_percentage', { precision: 5, scale: 2 }),
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
   actualCost: decimal('actual_cost', { precision: 10, scale: 2 }),
+  // Live execution control fields
+  pausedAt: timestamp('paused_at'),
+  resumedAt: timestamp('resumed_at'),
+  stoppedAt: timestamp('stopped_at'),
+  stopReason: text('stop_reason'),
+  sampleSize: integer('sample_size'),
+  estimatedDurationMs: integer('estimated_duration_ms'),
+  lastActivityAt: timestamp('last_activity_at'),
+  // Timestamps
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
+
+// Notifications Table - In-app notifications for users
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  organizationId: uuid('organization_id').notNull(),
+  type: text('type').notNull(), // 'execution_complete', 'execution_failed', 'team_invitation', 'system_alert'
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  data: jsonb('data').$type<Record<string, any>>(), // Additional context data
+  // Actions (optional CTAs)
+  actionLabel: text('action_label'),
+  actionUrl: text('action_url'),
+  // Status
+  isRead: boolean('is_read').default(false).notNull(),
+  readAt: timestamp('read_at'),
+  // Delivery channels
+  deliveredViaEmail: boolean('delivered_via_email').default(false).notNull(),
+  deliveredViaSlack: boolean('delivered_via_slack').default(false).notNull(),
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('idx_notifications_user').on(table.userId),
+  orgIdx: index('idx_notifications_org').on(table.organizationId),
+  typeIdx: index('idx_notifications_type').on(table.type),
+  isReadIdx: index('idx_notifications_is_read').on(table.isRead),
+  createdIdx: index('idx_notifications_created').on(table.createdAt),
+  // Composite index for unread notifications query
+  userUnreadIdx: index('idx_notifications_user_unread').on(table.userId, table.isRead, table.createdAt),
+}))
+
+// Notification Preferences Table - User notification settings
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().unique(),
+  organizationId: uuid('organization_id').notNull(),
+  // Email preferences
+  emailEnabled: boolean('email_enabled').default(true).notNull(),
+  emailExecutionComplete: boolean('email_execution_complete').default(true).notNull(),
+  emailExecutionFailed: boolean('email_execution_failed').default(true).notNull(),
+  emailWeeklyDigest: boolean('email_weekly_digest').default(true).notNull(),
+  emailTeamInvites: boolean('email_team_invites').default(true).notNull(),
+  // Slack preferences
+  slackEnabled: boolean('slack_enabled').default(false).notNull(),
+  slackWebhookUrl: text('slack_webhook_url'),
+  slackChannel: text('slack_channel'),
+  // In-app preferences
+  inAppEnabled: boolean('in_app_enabled').default(true).notNull(),
+  // SMS preferences (future)
+  smsEnabled: boolean('sms_enabled').default(false).notNull(),
+  smsPhoneNumber: text('sms_phone_number'),
+  // Push preferences (future)
+  pushEnabled: boolean('push_enabled').default(false).notNull(),
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('idx_notification_prefs_user').on(table.userId),
+  orgIdx: index('idx_notification_prefs_org').on(table.organizationId),
+}))
+
+// Execution Events Table - Real-time event persistence for WebSocket replay
+export const executionEvents = pgTable('execution_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: text('type').notNull(), // Event type from ExecutionEventType
+  timestamp: timestamp('timestamp').notNull().defaultNow(),
+  // Event payload - flexible structure for different event types
+  data: jsonb('data').notNull().$type<Record<string, any>>(),
+  // Optional filtering fields (denormalized for performance)
+  executionId: text('execution_id'),
+  batchId: text('batch_id'),
+  jobId: text('job_id'),
+  organizationId: uuid('organization_id'),
+  // TTL for automatic cleanup (events older than X days)
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  // Indexes for efficient querying
+  typeIdx: index('idx_events_type').on(table.type),
+  timestampIdx: index('idx_events_timestamp').on(table.timestamp),
+  executionIdx: index('idx_events_execution').on(table.executionId),
+  batchIdx: index('idx_events_batch').on(table.batchId),
+  jobIdx: index('idx_events_job').on(table.jobId),
+  orgIdx: index('idx_events_org').on(table.organizationId),
+  expiresIdx: index('idx_events_expires').on(table.expiresAt),
+  // Composite index for common query pattern
+  executionTimestampIdx: index('idx_events_execution_timestamp').on(table.executionId, table.timestamp),
+}))
 
 // Execution Results Table - Flexible JSONB for extracted data
 export const executionResults = pgTable('execution_results', {
@@ -163,11 +302,46 @@ export const failurePatterns = pgTable('failure_patterns', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+// Ground Truth Column Metrics Table - Detailed column-level accuracy tracking
+export const groundTruthColumnMetrics = pgTable('ground_truth_column_metrics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
+  columnName: text('column_name').notNull(),
+
+  // Accuracy metrics
+  totalJobs: integer('total_jobs').notNull(),
+  jobsWithGroundTruth: integer('jobs_with_ground_truth').notNull(),
+  exactMatches: integer('exact_matches').notNull(),
+  partialMatches: integer('partial_matches').notNull(),
+  mismatches: integer('mismatches').notNull(),
+  missingExtractions: integer('missing_extractions').notNull(),
+
+  // Aggregated statistics
+  accuracyPercentage: real('accuracy_percentage'), // exactMatches / jobsWithGroundTruth * 100
+  avgConfidenceScore: real('avg_confidence_score'),
+
+  // Failure patterns for this column
+  commonErrors: jsonb('common_errors').$type<Array<{
+    errorType: string
+    count: number
+    examples: string[]
+  }>>(),
+
+  // Timestamps
+  calculatedAt: timestamp('calculated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  batchIdx: index('idx_gt_column_metrics_batch').on(table.batchId),
+  batchColumnIdx: index('idx_gt_column_metrics_batch_column').on(table.batchId, table.columnName),
+}))
+
 // Relations
 export const projectsRelations = relations(projects, ({ many }) => ({
   batches: many(batches),
   jobs: many(jobs),
   executions: many(executions),
+  instructionVersions: many(instructionVersions),
+  filterPresets: many(filterPresets),
 }))
 
 export const batchesRelations = relations(batches, ({ one, many }) => ({
@@ -177,6 +351,9 @@ export const batchesRelations = relations(batches, ({ one, many }) => ({
   }),
   jobs: many(jobs),
   executions: many(executions),
+  groundTruthColumnMetrics: many(groundTruthColumnMetrics),
+  groundTruthMetricsHistory: many(groundTruthMetricsHistory),
+  exports: many(exports),
 }))
 
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
@@ -210,6 +387,8 @@ export const executionsRelations = relations(executions, ({ one, many }) => ({
   results: many(executionResults),
   accuracyMetrics: many(accuracyMetrics),
   failurePatterns: many(failurePatterns),
+  groundTruthMetricsHistory: many(groundTruthMetricsHistory),
+  exports: many(exports),
 }))
 
 export const executionResultsRelations = relations(executionResults, ({ one }) => ({
@@ -230,6 +409,127 @@ export const failurePatternsRelations = relations(failurePatterns, ({ one }) => 
   execution: one(executions, {
     fields: [failurePatterns.executionId],
     references: [executions.id],
+  }),
+}))
+
+export const groundTruthColumnMetricsRelations = relations(groundTruthColumnMetrics, ({ one }) => ({
+  batch: one(batches, {
+    fields: [groundTruthColumnMetrics.batchId],
+    references: [batches.id],
+  }),
+}))
+
+// Ground Truth Metrics History - Track accuracy over time
+export const groundTruthMetricsHistory = pgTable('ground_truth_metrics_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
+  executionId: uuid('execution_id').references(() => executions.id, { onDelete: 'cascade' }),
+
+  // Snapshot of overall metrics
+  overallAccuracy: real('overall_accuracy').notNull(),
+  totalJobs: integer('total_jobs').notNull(),
+  jobsEvaluated: integer('jobs_evaluated').notNull(),
+  exactMatches: integer('exact_matches').notNull(),
+  partialMatches: integer('partial_matches').notNull(),
+
+  // Column-level breakdown
+  columnMetrics: jsonb('column_metrics').$type<Array<{
+    columnName: string
+    accuracy: number
+    exactMatches: number
+    mismatches: number
+  }>>(),
+
+  // Context
+  instructionVersionId: uuid('instruction_version_id').references(() => instructionVersions.id),
+  notes: text('notes'),
+
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  batchTimeIdx: index('idx_gt_metrics_history_batch_time').on(table.batchId, table.createdAt),
+  executionIdx: index('idx_gt_metrics_history_execution').on(table.executionId),
+}))
+
+export const groundTruthMetricsHistoryRelations = relations(groundTruthMetricsHistory, ({ one }) => ({
+  batch: one(batches, {
+    fields: [groundTruthMetricsHistory.batchId],
+    references: [batches.id],
+  }),
+  execution: one(executions, {
+    fields: [groundTruthMetricsHistory.executionId],
+    references: [executions.id],
+  }),
+  instructionVersion: one(instructionVersions, {
+    fields: [groundTruthMetricsHistory.instructionVersionId],
+    references: [instructionVersions.id],
+  }),
+}))
+
+// Exports Table - Track export history
+export const exports = pgTable('exports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
+  executionId: uuid('execution_id').references(() => executions.id),
+
+  exportType: text('export_type').notNull(), // 'data' | 'screenshots'
+  format: text('format').notNull(), // 'csv' | 'json' | 'xlsx' | 'zip'
+
+  // Configuration
+  config: jsonb('config').$type<{
+    columns?: string[]
+    includeGroundTruth?: boolean
+    includeComparison?: boolean
+    filters?: {
+      jobIds?: string[]
+      status?: string[]
+      hasGroundTruth?: boolean
+      accuracyRange?: { min: number; max: number }
+    }
+  }>(),
+
+  // Result
+  fileUrl: text('file_url'),
+  fileSize: integer('file_size'),
+  rowCount: integer('row_count'),
+
+  status: text('status').notNull(), // 'pending' | 'processing' | 'completed' | 'failed'
+  errorMessage: text('error_message'),
+
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+})
+
+export const exportsRelations = relations(exports, ({ one }) => ({
+  batch: one(batches, {
+    fields: [exports.batchId],
+    references: [batches.id],
+  }),
+  execution: one(executions, {
+    fields: [exports.executionId],
+    references: [executions.id],
+  }),
+}))
+
+// Filter Presets - Saved filter configurations
+export const filterPresets = pgTable('filter_presets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: text('name').notNull(),
+  filters: jsonb('filters').$type<{
+    status?: string[]
+    hasGroundTruth?: boolean
+    evaluationResult?: string[]
+    accuracyRange?: { min: number; max: number }
+    searchQuery?: string
+  }>().notNull(),
+  isDefault: boolean('is_default').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const filterPresetsRelations = relations(filterPresets, ({ one }) => ({
+  project: one(projects, {
+    fields: [filterPresets.projectId],
+    references: [projects.id],
   }),
 }))
 
@@ -257,3 +557,15 @@ export type NewAccuracyMetric = typeof accuracyMetrics.$inferInsert
 
 export type FailurePattern = typeof failurePatterns.$inferSelect
 export type NewFailurePattern = typeof failurePatterns.$inferInsert
+
+export type GroundTruthColumnMetric = typeof groundTruthColumnMetrics.$inferSelect
+export type NewGroundTruthColumnMetric = typeof groundTruthColumnMetrics.$inferInsert
+
+export type GroundTruthMetricsHistory = typeof groundTruthMetricsHistory.$inferSelect
+export type NewGroundTruthMetricsHistory = typeof groundTruthMetricsHistory.$inferInsert
+
+export type Export = typeof exports.$inferSelect
+export type NewExport = typeof exports.$inferInsert
+
+export type FilterPreset = typeof filterPresets.$inferSelect
+export type NewFilterPreset = typeof filterPresets.$inferInsert

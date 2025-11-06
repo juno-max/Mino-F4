@@ -1,19 +1,22 @@
 import { HTMLAttributes } from 'react'
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'neutral'
+  variant?: 'success' | 'warning' | 'danger' | 'error' | 'info' | 'neutral' | 'outline' | 'incomplete' | 'complete'
 }
 
 export function Badge({ variant = 'neutral', className = '', children, ...props }: BadgeProps) {
   const variants = {
-    success: 'bg-green-100 text-green-700',
-    warning: 'bg-amber-100 text-amber-700',
+    complete: 'bg-emerald-100 text-emerald-700',
+    success: 'bg-emerald-100 text-emerald-700',
+    incomplete: 'bg-orange-100 text-orange-700',
+    warning: 'bg-orange-100 text-orange-700',
     danger: 'bg-red-100 text-red-700',
-    info: 'bg-amber-50 text-amber-700',
-    neutral: 'bg-stone-100 text-stone-700',
+    error: 'bg-red-100 text-red-700',
+    info: 'bg-blue-50 text-blue-700',
+    neutral: 'bg-gray-100 text-gray-700',
+    outline: 'border border-gray-300 bg-white text-gray-700',
   }
 
-  // Improved padding for better readability
   return (
     <span
       className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${variants[variant]} ${className}`}
