@@ -1,9 +1,13 @@
 import { pgTable, text, uuid, timestamp, jsonb, integer, decimal, boolean, real, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
+// Re-export all auth schema tables and relations
+export * from './auth-schema'
+
 // Projects Table
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   name: text('name').notNull(),
   description: text('description'),
   instructions: text('instructions').notNull(),
@@ -25,6 +29,7 @@ export const instructionVersions = pgTable('instruction_versions', {
 // Batches Table - Flexible JSONB schema
 export const batches = pgTable('batches', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: text('name').notNull(),
   description: text('description'),
@@ -50,6 +55,7 @@ export const batches = pgTable('batches', {
 // Jobs Table (individual tasks from batch rows)
 export const jobs = pgTable('jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(), // Multi-tenancy
   batchId: uuid('batch_id').references(() => batches.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   inputId: text('input_id').notNull(), // Row identifier from CSV
@@ -70,6 +76,13 @@ export const jobs = pgTable('jobs', {
     verifiedAt?: string
   }>(),
   status: text('status').notNull().default('queued'), // queued, running, completed, error, labeled
+  // Granular status tracking for better UX
+  detailedStatus: text('detailed_status'), // completed, partial, blocked, timeout, failed, validation_failed, not_found
+  blockedReason: text('blocked_reason'), // captcha, login_required, paywall, geo_blocked, rate_limited, cloudflare
+  fieldsExtracted: text('fields_extracted').array(), // List of successfully extracted field names
+  fieldsMissing: text('fields_missing').array(), // List of fields that failed to extract
+  completionPercentage: integer('completion_percentage').default(0), // 0-100 percentage of fields extracted
+  failureCategory: text('failure_category'), // extraction_failed, page_error, network_error, timeout, blocked
   hasGroundTruth: boolean('has_ground_truth').default(false).notNull(),
   isEvaluated: boolean('is_evaluated').default(false).notNull(),
   evaluationResult: text('evaluation_result'), // pass, fail
@@ -94,6 +107,12 @@ export const sessions = pgTable('sessions', {
   jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'cascade' }).notNull(),
   sessionNumber: integer('session_number').notNull(), // #1, #2, #3, etc
   status: text('status').notNull().default('pending'), // pending, running, completed, failed
+  // Granular status tracking for better UX
+  detailedStatus: text('detailed_status'), // completed, partial, blocked, timeout, failed, validation_failed, not_found
+  blockedReason: text('blocked_reason'), // captcha, login_required, paywall, geo_blocked, rate_limited, cloudflare
+  fieldsExtracted: text('fields_extracted').array(), // List of successfully extracted field names
+  fieldsMissing: text('fields_missing').array(), // List of fields that failed to extract
+  completionPercentage: integer('completion_percentage').default(0), // 0-100 percentage of fields extracted
   // Extracted output from AgentQL execution
   extractedData: jsonb('extracted_data').$type<Record<string, any>>(),
   rawOutput: text('raw_output'),
@@ -147,6 +166,95 @@ export const executions = pgTable('executions', {
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
+
+// Notifications Table - In-app notifications for users
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  organizationId: uuid('organization_id').notNull(),
+  type: text('type').notNull(), // 'execution_complete', 'execution_failed', 'team_invitation', 'system_alert'
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  data: jsonb('data').$type<Record<string, any>>(), // Additional context data
+  // Actions (optional CTAs)
+  actionLabel: text('action_label'),
+  actionUrl: text('action_url'),
+  // Status
+  isRead: boolean('is_read').default(false).notNull(),
+  readAt: timestamp('read_at'),
+  // Delivery channels
+  deliveredViaEmail: boolean('delivered_via_email').default(false).notNull(),
+  deliveredViaSlack: boolean('delivered_via_slack').default(false).notNull(),
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('idx_notifications_user').on(table.userId),
+  orgIdx: index('idx_notifications_org').on(table.organizationId),
+  typeIdx: index('idx_notifications_type').on(table.type),
+  isReadIdx: index('idx_notifications_is_read').on(table.isRead),
+  createdIdx: index('idx_notifications_created').on(table.createdAt),
+  // Composite index for unread notifications query
+  userUnreadIdx: index('idx_notifications_user_unread').on(table.userId, table.isRead, table.createdAt),
+}))
+
+// Notification Preferences Table - User notification settings
+export const notificationPreferences = pgTable('notification_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().unique(),
+  organizationId: uuid('organization_id').notNull(),
+  // Email preferences
+  emailEnabled: boolean('email_enabled').default(true).notNull(),
+  emailExecutionComplete: boolean('email_execution_complete').default(true).notNull(),
+  emailExecutionFailed: boolean('email_execution_failed').default(true).notNull(),
+  emailWeeklyDigest: boolean('email_weekly_digest').default(true).notNull(),
+  emailTeamInvites: boolean('email_team_invites').default(true).notNull(),
+  // Slack preferences
+  slackEnabled: boolean('slack_enabled').default(false).notNull(),
+  slackWebhookUrl: text('slack_webhook_url'),
+  slackChannel: text('slack_channel'),
+  // In-app preferences
+  inAppEnabled: boolean('in_app_enabled').default(true).notNull(),
+  // SMS preferences (future)
+  smsEnabled: boolean('sms_enabled').default(false).notNull(),
+  smsPhoneNumber: text('sms_phone_number'),
+  // Push preferences (future)
+  pushEnabled: boolean('push_enabled').default(false).notNull(),
+  // Metadata
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index('idx_notification_prefs_user').on(table.userId),
+  orgIdx: index('idx_notification_prefs_org').on(table.organizationId),
+}))
+
+// Execution Events Table - Real-time event persistence for WebSocket replay
+export const executionEvents = pgTable('execution_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: text('type').notNull(), // Event type from ExecutionEventType
+  timestamp: timestamp('timestamp').notNull().defaultNow(),
+  // Event payload - flexible structure for different event types
+  data: jsonb('data').notNull().$type<Record<string, any>>(),
+  // Optional filtering fields (denormalized for performance)
+  executionId: text('execution_id'),
+  batchId: text('batch_id'),
+  jobId: text('job_id'),
+  organizationId: uuid('organization_id'),
+  // TTL for automatic cleanup (events older than X days)
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  // Indexes for efficient querying
+  typeIdx: index('idx_events_type').on(table.type),
+  timestampIdx: index('idx_events_timestamp').on(table.timestamp),
+  executionIdx: index('idx_events_execution').on(table.executionId),
+  batchIdx: index('idx_events_batch').on(table.batchId),
+  jobIdx: index('idx_events_job').on(table.jobId),
+  orgIdx: index('idx_events_org').on(table.organizationId),
+  expiresIdx: index('idx_events_expires').on(table.expiresAt),
+  // Composite index for common query pattern
+  executionTimestampIdx: index('idx_events_execution_timestamp').on(table.executionId, table.timestamp),
+}))
 
 // Execution Results Table - Flexible JSONB for extracted data
 export const executionResults = pgTable('execution_results', {

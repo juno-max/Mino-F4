@@ -7,7 +7,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from './auth'
 import { db } from '@/db'
 import { users, organizations, organizationMembers } from '@/db/auth-schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import { ApiError, ErrorCodes } from './error-codes'
 
 export interface AuthenticatedUser {
@@ -44,7 +44,7 @@ export async function getAuthenticatedUser(): Promise<AuthenticatedUser> {
   }
 
   return {
-    id: session.user.id as string,
+    id: (session.user as any).id as string,
     email: session.user.email,
     name: session.user.name || null,
     image: session.user.image || null,
@@ -80,10 +80,10 @@ export async function getUserWithOrganization(): Promise<UserWithOrganization> {
     organizationId: membership.organizationId,
     organizationRole: membership.role,
     permissions: {
-      canCreateProjects: membership.canCreateProjects,
-      canExecuteJobs: membership.canExecuteJobs,
-      canManageMembers: membership.canManageMembers,
-      canManageBilling: membership.canManageBilling,
+      canCreateProjects: membership.canCreateProjects ?? false,
+      canExecuteJobs: membership.canExecuteJobs ?? false,
+      canManageMembers: membership.canManageMembers ?? false,
+      canManageBilling: membership.canManageBilling ?? false,
     },
   }
 }
@@ -203,7 +203,7 @@ export async function validateApiKey(apiKey: string): Promise<{ organizationId: 
   const key = await db.query.apiKeys.findFirst({
     where: and(
       eq(apiKeys.keyHash, keyHash),
-      eq(apiKeys.revokedAt, null)
+      isNull(apiKeys.revokedAt)
     ),
   })
 

@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
     const hasGroundTruth = gtColumns.length > 0
 
     const [batch] = await db.insert(batches).values({
+      organizationId: project.organizationId,
       projectId: project_id,
       name,
       description: goal || null,

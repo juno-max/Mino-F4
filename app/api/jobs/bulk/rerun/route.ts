@@ -123,16 +123,31 @@ export async function POST(request: NextRequest) {
       projectId,
       totalJobs: jobsToRerun.length,
       concurrency: 5,
-      executionType,
+      executionType: executionType || 'test',
     })
 
     console.log(`[BulkRerun] Created execution ${execution.id} for ${jobsToRerun.length} jobs`)
 
     // Start background execution
     if (useAgentQL) {
-      // Import and use the executeEvaJobs function (we need to extract it to a separate file)
-      // For now, return the execution ID and let the client poll for status
-      console.log('[BulkRerun] Background execution would start here')
+      console.log('[BulkRerun] Starting EVA agent execution for', jobsToRerun.length, 'jobs')
+      // Start execution in background - don't await to avoid blocking response
+      const { executeEvaJobs } = await import('@/lib/job-executor')
+      executeEvaJobs(
+        execution.id,
+        jobsToRerun.map(job => ({
+          id: job.id,
+          organizationId: job.organizationId,
+          batchId: job.batchId,
+          projectId: job.projectId,
+          inputId: job.inputId,
+          siteUrl: job.siteUrl,
+          goal: job.goal,
+          groundTruthData: job.groundTruthData,
+        })),
+        project.instructions,
+        batch.columnSchema as any[]
+      ).catch(err => console.error('[BulkRerun] Background execution error:', err))
     }
 
     return NextResponse.json({

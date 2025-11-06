@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/db'
 import { apiKeys } from '@/db/auth-schema'
 import { getUserWithOrganization } from '@/lib/auth-helpers'
-import { handleApiError, ApiError } from '@/lib/api-helpers'
-import { ErrorCodes } from '@/lib/error-codes'
-import { eq, and } from 'drizzle-orm'
+import { handleApiError } from '@/lib/api-helpers'
+import { ApiError, ErrorCodes } from '@/lib/error-codes'
+import { eq, and, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import crypto from 'crypto'
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(apiKeys.organizationId, user.organizationId),
-          eq(apiKeys.isRevoked, false)
+          isNull(apiKeys.revokedAt)
         )
       )
       .orderBy(apiKeys.createdAt)
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Generate secure API key
     const { key, hash } = generateApiKey()
+    const keyPrefix = key.substring(0, 12) // First 12 chars
     const keyPreview = `${key.substring(0, 12)}...${key.substring(key.length - 4)}`
 
     // Store hashed key in database
@@ -77,9 +78,11 @@ export async function POST(request: NextRequest) {
       .values({
         organizationId: user.organizationId,
         name: validated.name,
-        keyHash: hash,
+        keyPrefix,
         keyPreview,
+        keyHash: hash,
         scopes: validated.scopes || [],
+        createdBy: user.id,
         expiresAt: validated.expiresAt ? new Date(validated.expiresAt) : null,
       })
       .returning()
@@ -134,7 +137,6 @@ export async function DELETE(request: NextRequest) {
     await db
       .update(apiKeys)
       .set({
-        isRevoked: true,
         revokedAt: new Date(),
       })
       .where(eq(apiKeys.id, keyId))

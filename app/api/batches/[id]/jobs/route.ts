@@ -16,6 +16,26 @@ export async function GET(
     const { id: batchId } = await params
     const searchParams = request.nextUrl.searchParams
 
+    // Check if only stats are requested
+    const statsOnly = searchParams.get('statsOnly') === 'true'
+
+    if (statsOnly) {
+      // Return just the job status counts
+      const allJobs = await db.query.jobs.findMany({
+        where: eq(jobs.batchId, batchId),
+      })
+
+      const stats = {
+        total: allJobs.length,
+        queued: allJobs.filter(j => j.status === 'queued').length,
+        running: allJobs.filter(j => j.status === 'running').length,
+        completed: allJobs.filter(j => j.status === 'completed').length,
+        error: allJobs.filter(j => j.status === 'error').length,
+      }
+
+      return NextResponse.json({ stats })
+    }
+
     // Parse pagination parameters
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
     const cursor = searchParams.get('cursor') || null

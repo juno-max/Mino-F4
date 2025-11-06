@@ -4,13 +4,47 @@
 
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
+import CredentialsProvider from 'next-auth/providers/credentials'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
 import { db } from '@/db'
+import { users } from '@/db/auth-schema'
+import { eq } from 'drizzle-orm'
 
 export const authOptions: NextAuthOptions = {
-  adapter: DrizzleAdapter(db) as any,
+  // Note: Can't use adapter with CredentialsProvider + JWT sessions
+  // adapter: DrizzleAdapter(db) as any,
 
   providers: [
+    // Development credentials provider (bypasses OAuth for testing)
+    CredentialsProvider({
+      id: 'dev-login',
+      name: 'Development Login',
+      credentials: {
+        email: { label: "Email", type: "email", placeholder: "test@example.com" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.email) return null
+
+        // Find or create dev user
+        let [user] = await db.select().from(users).where(eq(users.email, credentials.email))
+
+        if (!user) {
+          // Create dev user
+          [user] = await db.insert(users).values({
+            email: credentials.email,
+            name: credentials.email.split('@')[0],
+            emailVerified: new Date(),
+          }).returning()
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+        }
+      }
+    }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -24,11 +58,61 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async session({ session, user }) {
+    async session({ session, user, token }) {
       if (session.user) {
-        session.user.id = user.id
+        // For JWT sessions (credentials provider), use token
+        // For database sessions (OAuth), use user
+        if (token?.sub) {
+          ;(session.user as any).id = token.sub
+        } else if (user) {
+          ;(session.user as any).id = (user as any).id
+        }
       }
       return session
+    },
+
+    async jwt({ token, user, account }) {
+      // Store user id in token for credentials provider
+      if (user) {
+        token.sub = user.id
+      }
+      // Handle organization creation for credentials login
+      if (account?.provider === 'dev-login' && user) {
+        try {
+          const { organizations, organizationMembers } = await import('@/db/auth-schema')
+
+          // Check if user already has an organization
+          const existingMembership = await db.query.organizationMembers.findFirst({
+            where: (members: any, { eq }: any) => eq(members.userId, user.id),
+          })
+
+          if (!existingMembership) {
+            const slug = user.email?.split('@')[0].replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'org'
+
+            const [org] = await db.insert(organizations).values({
+              name: `${user.name || user.email}'s Organization`,
+              slug: `${slug}-${Date.now()}`,
+              ownerId: user.id,
+              plan: 'free',
+            }).returning()
+
+            await db.insert(organizationMembers).values({
+              organizationId: org.id,
+              userId: user.id,
+              role: 'owner',
+              canCreateProjects: true,
+              canExecuteJobs: true,
+              canManageMembers: true,
+              canManageBilling: true,
+            })
+
+            console.log('Created organization for dev user:', user.email)
+          }
+        } catch (error) {
+          console.error('Error creating organization:', error)
+        }
+      }
+      return token
     },
 
     async signIn({ user, account, profile }) {
@@ -81,9 +165,8 @@ export const authOptions: NextAuthOptions = {
   },
 
   session: {
-    strategy: 'database',
+    strategy: 'jwt', // Use JWT for both credentials and OAuth
     maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // 24 hours
   },
 
   debug: process.env.NODE_ENV === 'development',

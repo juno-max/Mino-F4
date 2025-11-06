@@ -3,6 +3,7 @@ import { db, projects } from '@/db'
 import { eq } from 'drizzle-orm'
 import { validateRequest, handleApiError, errorResponse } from '@/lib/api-helpers'
 import { createProjectSchema } from '@/lib/validation-schemas'
+import { getUserWithOrganization } from '@/lib/auth-helpers'
 
 // Enable CORS
 const corsHeaders = {
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
 // POST /api/projects - Create a new project
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user with organization
+    const user = await getUserWithOrganization()
+
     // Validate request body
     const validation = await validateRequest(request, createProjectSchema)
     if (!validation.success) {
@@ -40,6 +44,7 @@ export async function POST(request: NextRequest) {
     const { name, description, instructions } = validation.data
 
     const [project] = await db.insert(projects).values({
+      organizationId: user.organizationId,
       name,
       description: description || null,
       instructions,

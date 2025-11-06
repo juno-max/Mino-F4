@@ -3,6 +3,7 @@ import { parse } from 'url'
 import next from 'next'
 import { WebSocketServer, WebSocket } from 'ws'
 import { initializeExecutionEvents } from './lib/execution-events'
+import { initializeRedisPubSub, shutdownRedisPubSub } from './lib/redis-pubsub'
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -44,8 +45,21 @@ app.prepare().then(() => {
     }
   })
 
-  // Create WebSocket server
-  const wss = new WebSocketServer({ server, path: '/ws' })
+  // Create WebSocket server with noServer option to handle upgrades manually
+  const wss = new WebSocketServer({ noServer: true })
+
+  // Handle WebSocket upgrade requests manually
+  server.on('upgrade', (request, socket, head) => {
+    const { pathname } = parse(request.url || '/')
+
+    if (pathname === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request)
+      })
+    } else {
+      socket.destroy()
+    }
+  })
 
   wss.on('connection', (ws: WebSocket) => {
     const clientId = `client_${++clientIdCounter}`
@@ -114,6 +128,15 @@ app.prepare().then(() => {
   // Initialize execution event publisher with broadcast function
   initializeExecutionEvents(broadcast)
 
+  // Initialize Redis pub/sub for multi-server scaling (optional)
+  initializeRedisPubSub(broadcast).then(success => {
+    if (success) {
+      console.log('> Redis pub/sub enabled - multi-server mode active')
+    } else {
+      console.log('> Redis pub/sub disabled - single-server mode')
+    }
+  })
+
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`)
     console.log(`> WebSocket server ready on ws://${hostname}:${port}/ws`)
@@ -121,12 +144,23 @@ app.prepare().then(() => {
 })
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server')
   clients.forEach((ws, clientId) => {
     ws.close()
   })
   clients.clear()
+  await shutdownRedisPubSub()
+  process.exit(0)
+})
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT signal received: closing HTTP server')
+  clients.forEach((ws, clientId) => {
+    ws.close()
+  })
+  clients.clear()
+  await shutdownRedisPubSub()
   process.exit(0)
 })
 

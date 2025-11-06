@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { History, Plus, Check, Clock, Eye, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/Button'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/Card'
 
 interface Version {
   id: string

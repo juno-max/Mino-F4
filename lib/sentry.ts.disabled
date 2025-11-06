@@ -1,0 +1,460 @@
+/**
+ * Sentry Integration
+ * Error tracking and performance monitoring
+ */
+
+import * as Sentry from '@sentry/nextjs'
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
+const ENVIRONMENT = process.env.NODE_ENV || 'development'
+const RELEASE = process.env.NEXT_PUBLIC_APP_VERSION || 'unknown'
+
+/**
+ * Initialize Sentry for the application
+ */
+export function initSentry() {
+  if (!SENTRY_DSN) {
+    console.warn('Sentry DSN not configured, error tracking disabled')
+    return
+  }
+
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: ENVIRONMENT,
+    release: RELEASE,
+
+    // Performance monitoring
+    tracesSampleRate: ENVIRONMENT === 'production' ? 0.1 : 1.0,
+
+    // Session replay (optional)
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+
+    // Error filtering
+    beforeSend(event, hint) {
+      // Filter out development errors
+      if (ENVIRONMENT === 'development') {
+        console.log('Sentry event:', event)
+        return null // Don't send in development
+      }
+
+      // Filter out known non-critical errors
+      const error = hint.originalException
+      if (error instanceof Error) {
+        // Filter out network errors
+        if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+          return null
+        }
+
+        // Filter out aborted requests
+        if (error.name === 'AbortError') {
+          return null
+        }
+      }
+
+      return event
+    },
+
+    // Integration configuration
+    // Note: BrowserTracing and Replay removed due to package compatibility
+    integrations: [],
+
+    // Additional options
+    ignoreErrors: [
+      // Browser extensions
+      'top.GLOBALS',
+      'chrome-extension://',
+      'moz-extension://',
+      // Network errors
+      'NetworkError',
+      'Network request failed',
+      'Failed to fetch',
+      // Random plugins/extensions
+      'atomicFindClose',
+      'fb_xd_fragment',
+      // Other known issues
+      'ResizeObserver loop limit exceeded',
+    ],
+  })
+}
+
+// ============================================================================
+// ERROR CAPTURING
+// ============================================================================
+
+/**
+ * Capture exception with context
+ */
+export function captureException(
+  error: Error | unknown,
+  context?: {
+    level?: Sentry.SeverityLevel
+    tags?: Record<string, string>
+    extra?: Record<string, any>
+    userId?: string
+    organizationId?: string
+  }
+) {
+  if (!SENTRY_DSN) {
+    console.error('Error (Sentry disabled):', error, context)
+    return
+  }
+
+  Sentry.withScope((scope) => {
+    // Set context
+    if (context?.level) {
+      scope.setLevel(context.level)
+    }
+
+    if (context?.tags) {
+      Object.entries(context.tags).forEach(([key, value]) => {
+        scope.setTag(key, value)
+      })
+    }
+
+    if (context?.extra) {
+      Object.entries(context.extra).forEach(([key, value]) => {
+        scope.setExtra(key, value)
+      })
+    }
+
+    if (context?.userId) {
+      scope.setUser({ id: context.userId })
+    }
+
+    if (context?.organizationId) {
+      scope.setTag('organizationId', context.organizationId)
+    }
+
+    // Capture the exception
+    Sentry.captureException(error)
+  })
+}
+
+/**
+ * Capture message with context
+ */
+export function captureMessage(
+  message: string,
+  level: Sentry.SeverityLevel = 'info',
+  context?: {
+    tags?: Record<string, string>
+    extra?: Record<string, any>
+  }
+) {
+  if (!SENTRY_DSN) {
+    console.log('Message (Sentry disabled):', message, context)
+    return
+  }
+
+  Sentry.withScope((scope) => {
+    scope.setLevel(level)
+
+    if (context?.tags) {
+      Object.entries(context.tags).forEach(([key, value]) => {
+        scope.setTag(key, value)
+      })
+    }
+
+    if (context?.extra) {
+      Object.entries(context.extra).forEach(([key, value]) => {
+        scope.setExtra(key, value)
+      })
+    }
+
+    Sentry.captureMessage(message, level)
+  })
+}
+
+// ============================================================================
+// USER CONTEXT
+// ============================================================================
+
+/**
+ * Set user context for error tracking
+ */
+export function setUser(user: {
+  id: string
+  email?: string
+  username?: string
+  organizationId?: string
+}) {
+  if (!SENTRY_DSN) return
+
+  Sentry.setUser({
+    id: user.id,
+    email: user.email,
+    username: user.username,
+  })
+
+  if (user.organizationId) {
+    Sentry.setTag('organizationId', user.organizationId)
+  }
+}
+
+/**
+ * Clear user context
+ */
+export function clearUser() {
+  if (!SENTRY_DSN) return
+  Sentry.setUser(null)
+}
+
+// ============================================================================
+// PERFORMANCE MONITORING
+// ============================================================================
+
+/**
+ * Start a performance transaction
+ */
+export function startTransaction(
+  name: string,
+  op: string,
+  data?: Record<string, any>
+) {
+  if (!SENTRY_DSN) {
+    return {
+      finish: () => {},
+      setData: () => {},
+      setStatus: () => {},
+    }
+  }
+
+  const transaction = Sentry.startTransaction({
+    name,
+    op,
+    data,
+  })
+
+  return transaction
+}
+
+/**
+ * Measure async operation
+ */
+export async function measureOperation<T>(
+  name: string,
+  operation: () => Promise<T>,
+  context?: {
+    tags?: Record<string, string>
+    data?: Record<string, any>
+  }
+): Promise<T> {
+  if (!SENTRY_DSN) {
+    return operation()
+  }
+
+  const transaction = Sentry.startTransaction({
+    name,
+    op: 'function',
+    data: context?.data,
+  })
+
+  if (context?.tags) {
+    Object.entries(context.tags).forEach(([key, value]) => {
+      transaction.setTag(key, value)
+    })
+  }
+
+  try {
+    const result = await operation()
+    transaction.setStatus('ok')
+    return result
+  } catch (error) {
+    transaction.setStatus('internal_error')
+    captureException(error, {
+      tags: context?.tags,
+      extra: context?.data,
+    })
+    throw error
+  } finally {
+    transaction.finish()
+  }
+}
+
+// ============================================================================
+// BREADCRUMBS
+// ============================================================================
+
+/**
+ * Add breadcrumb for debugging
+ */
+export function addBreadcrumb(
+  message: string,
+  category?: string,
+  level?: Sentry.SeverityLevel,
+  data?: Record<string, any>
+) {
+  if (!SENTRY_DSN) return
+
+  Sentry.addBreadcrumb({
+    message,
+    category,
+    level: level || 'info',
+    data,
+  })
+}
+
+/**
+ * Add navigation breadcrumb
+ */
+export function addNavigationBreadcrumb(from: string, to: string) {
+  addBreadcrumb(`Navigated from ${from} to ${to}`, 'navigation', 'info', {
+    from,
+    to,
+  })
+}
+
+/**
+ * Add API call breadcrumb
+ */
+export function addApiCallBreadcrumb(
+  method: string,
+  url: string,
+  statusCode?: number,
+  duration?: number
+) {
+  addBreadcrumb(`${method} ${url}`, 'http', 'info', {
+    method,
+    url,
+    status_code: statusCode,
+    duration,
+  })
+}
+
+/**
+ * Add database query breadcrumb
+ */
+export function addDatabaseBreadcrumb(
+  query: string,
+  duration?: number,
+  recordCount?: number
+) {
+  addBreadcrumb('Database query', 'db', 'debug', {
+    query: query.substring(0, 100),
+    duration,
+    record_count: recordCount,
+  })
+}
+
+// ============================================================================
+// SPECIALIZED ERROR HANDLERS
+// ============================================================================
+
+/**
+ * Capture API error
+ */
+export function captureApiError(
+  error: Error,
+  request: {
+    method: string
+    url: string
+    body?: any
+    headers?: Record<string, string>
+  },
+  response?: {
+    status: number
+    body?: any
+  }
+) {
+  captureException(error, {
+    level: 'error',
+    tags: {
+      type: 'api_error',
+      method: request.method,
+      status: response?.status?.toString() || 'unknown',
+    },
+    extra: {
+      request: {
+        method: request.method,
+        url: request.url,
+        body: request.body,
+      },
+      response: response
+        ? {
+            status: response.status,
+            body: response.body,
+          }
+        : undefined,
+    },
+  })
+}
+
+/**
+ * Capture database error
+ */
+export function captureDatabaseError(
+  error: Error,
+  query?: string,
+  params?: any
+) {
+  captureException(error, {
+    level: 'error',
+    tags: {
+      type: 'database_error',
+    },
+    extra: {
+      query: query?.substring(0, 200),
+      params,
+    },
+  })
+}
+
+/**
+ * Capture job execution error
+ */
+export function captureJobError(
+  error: Error,
+  jobId: string,
+  batchId?: string,
+  projectId?: string
+) {
+  captureException(error, {
+    level: 'error',
+    tags: {
+      type: 'job_error',
+      jobId,
+      ...(batchId && { batchId }),
+      ...(projectId && { projectId }),
+    },
+  })
+}
+
+/**
+ * Capture authentication error
+ */
+export function captureAuthError(error: Error, userId?: string) {
+  captureException(error, {
+    level: 'warning',
+    tags: {
+      type: 'auth_error',
+    },
+    extra: {
+      userId,
+    },
+  })
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+export { Sentry }
+export default {
+  init: initSentry,
+  captureException,
+  captureMessage,
+  setUser,
+  clearUser,
+  startTransaction,
+  measureOperation,
+  addBreadcrumb,
+  captureApiError,
+  captureDatabaseError,
+  captureJobError,
+  captureAuthError,
+}

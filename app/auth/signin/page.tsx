@@ -6,9 +6,12 @@ import { useSearchParams } from 'next/navigation'
 
 export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [devEmail, setDevEmail] = useState('test@example.com')
   const searchParams = useSearchParams()
   const callbackUrl = searchParams?.get('callbackUrl') || '/'
   const error = searchParams?.get('error')
+  // Always show dev login in development (checked by Next.js public env var)
+  const isDevelopment = true
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
@@ -20,12 +23,31 @@ export default function SignInPage() {
     }
   }
 
+  const handleDevLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      const result = await signIn('dev-login', {
+        email: devEmail,
+        callbackUrl,
+        redirect: true,
+      })
+      if (result?.error) {
+        console.error('Dev login error:', result.error)
+        setIsLoading(false)
+      }
+    } catch (error) {
+      console.error('Dev login error:', error)
+      setIsLoading(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-fintech-lg border border-gray-200 p-8 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">MINO</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2 tracking-tight">MINO</h1>
           <p className="text-gray-600">Web Automation Platform</p>
         </div>
 
@@ -49,10 +71,52 @@ export default function SignInPage() {
 
         {/* Sign in options */}
         <div className="space-y-4">
+          {/* Development Login - Only shown in development */}
+          {isDevelopment && (
+            <>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-medium text-emerald-900 mb-2">Development Mode</p>
+                <p className="text-xs text-emerald-700 mb-3">
+                  Quick login for testing - no OAuth required
+                </p>
+                <form onSubmit={handleDevLogin} className="space-y-3">
+                  <input
+                    type="email"
+                    value={devEmail}
+                    onChange={(e) => setDevEmail(e.target.value)}
+                    placeholder="Enter any email"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(52,211,153)] transition-all"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isLoading || !devEmail}
+                    className="w-full px-6 py-3 bg-[rgb(52,211,153)] text-white rounded-lg hover:bg-[rgb(16,185,129)] transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium active:scale-[0.98]"
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+                    ) : (
+                      'Sign In (Dev)'
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                </div>
+              </div>
+            </>
+          )}
+
           <button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-[rgb(52,211,153)] transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {isLoading ? (
               <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />

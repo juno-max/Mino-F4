@@ -122,7 +122,7 @@ export async function createMetricsSnapshot(executionId: string) {
 
     // Also update execution with accuracy percentage
     await db.update(executions)
-      .set({ accuracyPercentage: overallAccuracy })
+      .set({ accuracyPercentage: overallAccuracy.toFixed(2) })
       .where(eq(executions.id, executionId))
 
     return snapshot

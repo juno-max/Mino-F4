@@ -159,6 +159,7 @@ export const apiKeys = pgTable('api_keys', {
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'cascade' }).notNull(),
   name: text('name').notNull(),
   keyPrefix: text('key_prefix').notNull(), // First 8 chars for display
+  keyPreview: text('key_preview').notNull(), // e.g., "mino_sk_abc...xyz" for display
   keyHash: text('key_hash').notNull().unique(), // SHA-256 hash of full key
 
   // Permissions

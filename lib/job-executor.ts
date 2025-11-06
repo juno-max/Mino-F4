@@ -3,7 +3,7 @@
  * This module handles EVA workflow execution with retry logic and progress tracking
  */
 
-import { db, jobs, sessions, executions } from '@/db'
+import { db, jobs, sessions, executions, batches } from '@/db'
 import { eq } from 'drizzle-orm'
 import { executeEvaWorkflow } from './eva-executor'
 import { withRetry, RetryPresets } from './retry-logic'
@@ -17,6 +17,7 @@ import {
 } from './execution-events'
 import { createMetricsSnapshot } from './metrics-snapshot'
 import { createConcurrencyController } from './concurrency-control'
+import { detectJobStatus, getExpectedFieldsFromSchema } from './status-detector'
 
 interface JobToExecute {
   id: string
@@ -46,6 +47,9 @@ export async function executeEvaJobs(
     if (!execution) {
       throw new Error(`Execution ${executionId} not found`)
     }
+
+    // Get expected fields for status detection
+    const expectedFields = getExpectedFieldsFromSchema(columnSchema)
 
     // Check if execution is paused/stopped
     if (execution.status === 'paused' || execution.status === 'stopped') {
@@ -101,16 +105,24 @@ export async function executeEvaJobs(
             return
           }
 
-          // Update job status to running
+          // Update job status to running with initial feedback
           await db.update(jobs).set({
             status: 'running',
             lastRunAt: new Date(),
             progressPercentage: 0,
+            currentStep: 'Connecting to agent...',
           }).where(eq(jobs.id, job.id))
 
           // Create session for this job execution
+          // Get the next session number for this job
+          const existingSessions = await db.query.sessions.findMany({
+            where: eq(sessions.jobId, job.id),
+          })
+          const sessionNumber = existingSessions.length + 1
+
           const [session] = await db.insert(sessions).values({
             jobId: job.id,
+            sessionNumber,
             status: 'running',
             startedAt: new Date(),
           }).returning()
@@ -132,7 +144,7 @@ export async function executeEvaJobs(
                 job.siteUrl,
                 projectInstructions,
                 columnSchema,
-                job.groundTruthData,
+                job.groundTruthData || null,
                 async (url) => {
                   // Store streaming URL for live browser view
                   console.log(`[executeEvaJobs] Job ${job.id}: Stream available at ${url}`)
@@ -175,7 +187,17 @@ export async function executeEvaJobs(
           if (retryResult.success && retryResult.data) {
             const result = retryResult.data
 
-            // Update session with results
+            // Detect granular status
+            const statusDetection = detectJobStatus({
+              rawOutput: result.logs.join('\n'),
+              errorMessage: result.error || null,
+              extractedData: result.extractedData || null,
+              expectedFields,
+              status: result.error ? 'failed' : 'completed',
+              executionTimeMs,
+            })
+
+            // Update session with results and granular status
             await db.update(sessions).set({
               status: result.error ? 'failed' : 'completed',
               extractedData: result.extractedData,
@@ -184,6 +206,12 @@ export async function executeEvaJobs(
               failureReason: result.error ? 'EVA execution error' : null,
               executionTimeMs,
               completedAt: new Date(),
+              // Granular status fields
+              detailedStatus: statusDetection.detailedStatus,
+              blockedReason: statusDetection.blockedReason || null,
+              fieldsExtracted: statusDetection.fieldsExtracted,
+              fieldsMissing: statusDetection.fieldsMissing,
+              completionPercentage: statusDetection.completionPercentage,
             }).where(eq(sessions.id, session.id))
 
             // Calculate accuracy
@@ -192,7 +220,7 @@ export async function executeEvaJobs(
               isAccurate = result.accuracy.accuracyScore === 100
             }
 
-            // Update job status
+            // Update job status with granular information
             const jobStatus = result.error ? 'error' : 'completed'
             await db.update(jobs).set({
               status: jobStatus,
@@ -201,6 +229,13 @@ export async function executeEvaJobs(
               completedAt: new Date(),
               progressPercentage: 100,
               executionDurationMs: executionTimeMs,
+              // Granular status fields
+              detailedStatus: statusDetection.detailedStatus,
+              blockedReason: statusDetection.blockedReason || null,
+              fieldsExtracted: statusDetection.fieldsExtracted,
+              fieldsMissing: statusDetection.fieldsMissing,
+              completionPercentage: statusDetection.completionPercentage,
+              failureCategory: statusDetection.failureCategory || null,
             }).where(eq(jobs.id, job.id))
 
             // Update counters
@@ -241,20 +276,43 @@ export async function executeEvaJobs(
 
           const executionTimeMs = Date.now() - startTime
 
-          // Update session as failed
+          // Detect granular status for failed jobs
+          const statusDetection = detectJobStatus({
+            rawOutput: error.stack || error.message,
+            errorMessage: error.message,
+            extractedData: null,
+            expectedFields,
+            status: 'failed',
+            executionTimeMs,
+          })
+
+          // Update session as failed with granular status
           await db.update(sessions).set({
             status: 'failed',
             errorMessage: error.message,
             failureReason: 'EVA execution error',
             executionTimeMs,
             completedAt: new Date(),
+            // Granular status fields
+            detailedStatus: statusDetection.detailedStatus,
+            blockedReason: statusDetection.blockedReason || null,
+            fieldsExtracted: statusDetection.fieldsExtracted,
+            fieldsMissing: statusDetection.fieldsMissing,
+            completionPercentage: statusDetection.completionPercentage,
           }).where(eq(sessions.jobId, job.id))
 
-          // Update job as error
+          // Update job as error with granular status
           await db.update(jobs).set({
             status: 'error',
             completedAt: new Date(),
             executionDurationMs: executionTimeMs,
+            // Granular status fields
+            detailedStatus: statusDetection.detailedStatus,
+            blockedReason: statusDetection.blockedReason || null,
+            fieldsExtracted: statusDetection.fieldsExtracted,
+            fieldsMissing: statusDetection.fieldsMissing,
+            completionPercentage: statusDetection.completionPercentage,
+            failureCategory: statusDetection.failureCategory || null,
           }).where(eq(jobs.id, job.id))
 
           // Update counters
@@ -302,7 +360,7 @@ export async function executeEvaJobs(
 
       // Create metrics snapshot
       try {
-        await createMetricsSnapshot(execution.batchId, executionId)
+        await createMetricsSnapshot(executionId)
       } catch (error) {
         console.error('[executeEvaJobs] Error creating metrics snapshot:', error)
       }

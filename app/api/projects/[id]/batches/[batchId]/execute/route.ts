@@ -113,6 +113,7 @@ export async function POST(
         const goal = generateGoal(project.instructions, siteData, columnSchema)
 
         const [job] = await db.insert(jobs).values({
+          organizationId: batch.organizationId,
           batchId,
           projectId,
           inputId: siteData.id || siteData.name || siteUrl,
@@ -155,18 +156,10 @@ export async function POST(
     })
 
     // Run execution asynchronously with EVA agent
-    if (useAgentQL) {
-      console.log('[Execute] Starting EVA agent execution for', jobsToExecute.length, 'jobs')
-      // Start execution in background - don't await to avoid blocking response
-      executeEvaJobs(execution.id, jobsToExecute, project.instructions, columnSchema)
-        .catch(err => console.error('[Execute] Background execution error:', err))
-    } else {
-      // Use mock executor for testing
-      console.log('[Execute] Starting mock execution for', jobsToExecute.length, 'jobs')
-      const { executeBatchMock } = await import('@/lib/mock-executor')
-      executeMockJobs(execution.id, jobsToExecute, columnSchema)
-        .catch(err => console.error('[Execute] Mock execution error:', err))
-    }
+    console.log('[Execute] Starting EVA agent execution for', jobsToExecute.length, 'jobs')
+    // Start execution in background - don't await to avoid blocking response
+    executeEvaJobs(execution.id, jobsToExecute, project.instructions, columnSchema)
+      .catch(err => console.error('[Execute] Background execution error:', err))
 
     return NextResponse.json({
       execution,
@@ -473,79 +466,6 @@ async function executeEvaJobs(
 
   } catch (error) {
     console.error('EVA execution error:', error)
-    await db.update(executions).set({
-      status: 'failed',
-      completedAt: new Date(),
-    }).where(eq(executions.id, executionId))
-  }
-}
-
-async function executeMockJobs(
-  executionId: string,
-  jobsList: any[],
-  columnSchema: any[]
-) {
-  const { executeBatchMock } = await import('@/lib/mock-executor')
-
-  try {
-    for (const job of jobsList) {
-      // Update job status to running
-      await db.update(jobs).set({ status: 'running', lastRunAt: new Date() }).where(eq(jobs.id, job.id))
-
-      // Create session
-      const [session] = await db.insert(sessions).values({
-        jobId: job.id,
-        sessionNumber: 1,
-        status: 'running',
-        startedAt: new Date(),
-      }).returning()
-
-      // Execute mock
-      const { executeMockWorkflow } = await import('@/lib/mock-executor')
-      const result = await executeMockWorkflow(
-        job.siteUrl,
-        columnSchema,
-        job.groundTruthData
-      )
-
-      // Update session with results
-      await db.update(sessions).set({
-        status: result.failureReason ? 'failed' : 'completed',
-        extractedData: result.extractedData,
-        rawOutput: JSON.stringify(result.extractedData),
-        errorMessage: result.failureReason,
-        failureReason: result.failureReason,
-        executionTimeMs: result.executionTimeMs,
-        completedAt: new Date(),
-      }).where(eq(sessions.id, session.id))
-
-      // Update job status
-      const jobStatus = result.failureReason ? 'error' : 'completed'
-      await db.update(jobs).set({
-        status: jobStatus,
-        isEvaluated: result.isAccurate !== null,
-        evaluationResult: result.isAccurate ? 'pass' : 'fail',
-      }).where(eq(jobs.id, job.id))
-
-      // Update execution stats
-      const completedJobs = jobsList.indexOf(job) + 1
-      await db.update(executions).set({
-        completedJobs,
-        runningJobs: 0,
-      }).where(eq(executions.id, executionId))
-    }
-
-    // Mark execution as completed
-    await db.update(executions).set({
-      status: 'completed',
-      completedAt: new Date(),
-    }).where(eq(executions.id, executionId))
-
-    // Auto-create metrics snapshot for tracking accuracy over time
-    await createMetricsSnapshot(executionId)
-
-  } catch (error) {
-    console.error('Mock execution error:', error)
     await db.update(executions).set({
       status: 'failed',
       completedAt: new Date(),

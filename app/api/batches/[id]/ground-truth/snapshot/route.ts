@@ -9,10 +9,10 @@ import { eq, and } from 'drizzle-orm'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: batchId } = await params
+    const { id: batchId } = params
     const body = await request.json()
     const { notes, executionId, instructionVersionId } = body
 
@@ -77,7 +77,7 @@ export async function POST(
  * Auto-create snapshot after execution completes
  * Called by execution completion hook
  */
-export async function createAutoSnapshot(
+async function createAutoSnapshot(
   batchId: string,
   executionId: string,
   instructionVersionId?: string

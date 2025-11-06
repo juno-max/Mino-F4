@@ -5,12 +5,11 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function Card({ className = '', children, padding = 'md', ...props }: CardProps) {
-  // Consistent padding scale
   const paddingClasses = {
     none: '',
-    sm: 'p-4',   // 16px - compact content
-    md: 'p-6',   // 24px - standard content
-    lg: 'p-8',   // 32px - spacious content
+    sm: 'p-4',
+    md: 'p-6',
+    lg: 'p-8',
   }
 
   return (
@@ -18,6 +17,38 @@ export function Card({ className = '', children, padding = 'md', ...props }: Car
       className={`bg-white rounded-lg border border-stone-200 shadow-fintech-sm ${paddingClasses[padding]} ${className}`}
       {...props}
     >
+      {children}
+    </div>
+  )
+}
+
+export function CardHeader({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`border-b border-gray-100 pb-4 mb-4 ${className}`} {...props}>
+      {children}
+    </div>
+  )
+}
+
+export function CardTitle({ className = '', children, ...props }: HTMLAttributes<HTMLHeadingElement>) {
+  return (
+    <h3 className={`text-lg font-semibold text-gray-900 tracking-tight ${className}`} {...props}>
+      {children}
+    </h3>
+  )
+}
+
+export function CardDescription({ className = '', children, ...props }: HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p className={`text-sm text-gray-600 mt-1 ${className}`} {...props}>
+      {children}
+    </p>
+  )
+}
+
+export function CardContent({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={className} {...props}>
       {children}
     </div>
   )

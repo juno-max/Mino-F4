@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/db'
 import { apiKeys } from '@/db/auth-schema'
 import { getUserWithOrganization } from '@/lib/auth-helpers'
-import { handleApiError, ApiError } from '@/lib/api-helpers'
-import { ErrorCodes } from '@/lib/error-codes'
+import { handleApiError } from '@/lib/api-helpers'
+import { ApiError, ErrorCodes } from '@/lib/error-codes'
 import { eq, and } from 'drizzle-orm'
 
 /**
@@ -33,7 +33,7 @@ export async function DELETE(
       throw new ApiError('API key not found', ErrorCodes.NOT_FOUND, 404)
     }
 
-    if (existingKey.isRevoked) {
+    if (existingKey.revokedAt) {
       throw new ApiError('API key already revoked', ErrorCodes.CONFLICT, 409)
     }
 
@@ -41,8 +41,8 @@ export async function DELETE(
     await db
       .update(apiKeys)
       .set({
-        isRevoked: true,
         revokedAt: new Date(),
+        revokedBy: user.id,
       })
       .where(eq(apiKeys.id, keyId))
 
