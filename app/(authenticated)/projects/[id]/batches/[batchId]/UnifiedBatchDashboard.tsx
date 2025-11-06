@@ -16,7 +16,7 @@ import { GroundTruthConfigurator } from '@/components/batch-dashboard/GroundTrut
 import { ExportConfigurator, ExportConfig } from '@/components/batch-dashboard/ExportConfigurator'
 
 // Table component
-import { JobsTable } from '@/components/JobsTable'
+import { JobsTableV3 } from '@/components/JobsTableV3'
 
 interface UnifiedBatchDashboardProps {
   projectId: string
@@ -521,11 +521,10 @@ export function UnifiedBatchDashboard({
 
       {/* Jobs Table - PRIMARY VIEW */}
       <div className="mt-6">
-        <JobsTable
+        <JobsTableV3
           projectId={projectId}
           batchId={batchId}
           columnSchema={columnSchema}
-          realTimeUpdates={dashboardState === 'running' || dashboardState === 'paused'}
           pollInterval={dashboardState === 'running' || dashboardState === 'paused' ? 2000 : 10000}
         />
       </div>
