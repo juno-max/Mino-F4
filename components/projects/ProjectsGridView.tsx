@@ -51,7 +51,7 @@ export function ProjectsGridView({ projects }: ProjectsGridViewProps) {
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => (
         <Link key={project.id} href={`/projects/${project.id}`}>
-          <Card className="hover:shadow-fintech-md hover:border-emerald-200 transition-all duration-200 cursor-pointer bg-white p-3">
+          <Card variant="interactive" padding="sm" className="bg-white">
             {/* Single-Line Header */}
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-1.5 flex-1 min-w-0">

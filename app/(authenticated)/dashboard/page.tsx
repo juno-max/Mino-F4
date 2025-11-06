@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Play, CheckCircle, XCircle, Clock, TrendingUp, Folder, FileText, Plus, Upload } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
+import { MetricCard, MetricGrid } from '@/components/MetricCard'
 import { formatDistance } from 'date-fns'
 import { getUserWithOrganization } from '@/lib/auth-helpers'
 
@@ -80,84 +81,43 @@ export default async function DashboardPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Total Projects */}
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Folder className="h-8 w-8 text-blue-600" />
-                <span className="text-xs font-semibold text-blue-600 uppercase tracking-wide">
-                  Projects
-                </span>
-              </div>
-              <div className="text-4xl font-bold text-gray-900 mb-1">
-                {allProjects.length}
-              </div>
-              <p className="text-sm text-gray-600">Total automation projects</p>
-            </div>
-          </Card>
+        {/* Stats Grid - New MetricCard Components */}
+        <MetricGrid columns={4}>
+          <MetricCard
+            label="Total Projects"
+            value={allProjects.length}
+            icon={<Folder className="h-5 w-5" />}
+            color="blue"
+          />
 
-          {/* Running Jobs */}
-          <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <Play className="h-8 w-8 text-emerald-600" />
-                <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">
-                  Running
-                </span>
-              </div>
-              <div className="text-4xl font-bold text-gray-900 mb-1">
-                {Number(jobStats.runningJobs)}
-              </div>
-              <p className="text-sm text-gray-600">Active jobs right now</p>
-            </div>
-          </Card>
+          <MetricCard
+            label="Active Jobs"
+            value={Number(jobStats.runningJobs)}
+            icon={<Play className="h-5 w-5" />}
+            color="emerald"
+          />
 
-          {/* Completed Jobs */}
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <CheckCircle className="h-8 w-8 text-purple-600" />
-                <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
-                  Completed
-                </span>
-              </div>
-              <div className="text-4xl font-bold text-gray-900 mb-1">
-                {Number(jobStats.completedJobs)}
-              </div>
-              <p className="text-sm text-gray-600">Successfully finished</p>
-            </div>
-          </Card>
+          <MetricCard
+            label="Completed"
+            value={Number(jobStats.completedJobs)}
+            icon={<CheckCircle className="h-5 w-5" />}
+            color="blue"
+          />
 
-          {/* Success Rate */}
-          <Card className={`bg-gradient-to-br ${
-            successRate >= 90 ? 'from-green-50 to-green-100/50 border-green-200' :
-            successRate >= 70 ? 'from-amber-50 to-amber-100/50 border-amber-200' :
-            'from-red-50 to-red-100/50 border-red-200'
-          }`}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <TrendingUp className={`h-8 w-8 ${
-                  successRate >= 90 ? 'text-green-600' :
-                  successRate >= 70 ? 'text-amber-600' :
-                  'text-red-600'
-                }`} />
-                <span className={`text-xs font-semibold uppercase tracking-wide ${
-                  successRate >= 90 ? 'text-green-600' :
-                  successRate >= 70 ? 'text-amber-600' :
-                  'text-red-600'
-                }`}>
-                  Success Rate
-                </span>
-              </div>
-              <div className="text-4xl font-bold text-gray-900 mb-1">
-                {successRate}%
-              </div>
-              <p className="text-sm text-gray-600">Overall accuracy</p>
-            </div>
-          </Card>
-        </div>
+          <MetricCard
+            label="Success Rate"
+            value={`${successRate}%`}
+            icon={<TrendingUp className="h-5 w-5" />}
+            color={successRate >= 90 ? 'emerald' : successRate >= 70 ? 'amber' : 'red'}
+            trend={{
+              value: successRate >= 90 ? 5 : successRate >= 70 ? 0 : -5,
+              direction: successRate >= 90 ? 'up' : successRate >= 70 ? 'neutral' : 'down',
+              period: 'vs last week'
+            }}
+          />
+        </MetricGrid>
+
+        <div className="h-8" />
 
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -189,7 +149,7 @@ export default async function DashboardPage() {
                     <Link
                       key={batch.id}
                       href={`/projects/${batch.projectId}/batches/${batch.id}`}
-                      className="block px-6 py-4 hover:bg-gray-50 transition-colors"
+                      className="block px-6 py-4 table-row-hover"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">

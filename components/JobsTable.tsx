@@ -5,6 +5,7 @@ import { CheckSquare, Square, ArrowUpDown, Activity, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from './Badge'
 import { AgentDetailDrawer } from './AgentDetailDrawer'
+import { EnhancedTableHeader } from './EnhancedTableHeader'
 
 interface ColumnInfo {
   name: string
@@ -54,6 +55,8 @@ export function JobsTable({
   const [showOnlyRunning, setShowOnlyRunning] = useState(false)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [jobDetails, setJobDetails] = useState<Record<string, any>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   // Identify ground truth columns
   const gtColumns = columnSchema.filter(col => col.isGroundTruth)
@@ -156,6 +159,36 @@ export function JobsTable({
     setSelectedJobId(null)
   }
 
+  const handleExport = () => {
+    setExporting(true)
+    try {
+      // Prepare CSV data
+      const headers = ['Job ID', 'Site URL', 'Site Name', 'Status', 'Match %']
+      const rows = sortedJobs.map(job => [
+        job.id,
+        job.siteUrl,
+        job.siteName || '',
+        job.status,
+        calculateAccuracy(job)?.toString() || 'N/A'
+      ])
+
+      // Create CSV content
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n')
+
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `jobs-export-${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // Calculate accuracy percentage for a job
   const calculateAccuracy = (job: Job): number | null => {
     if (gtColumns.length === 0 || !job.groundTruthData || !job.extractedData) {
@@ -180,8 +213,19 @@ export function JobsTable({
     return total > 0 ? Math.round((matches / total) * 100) : null
   }
 
-  // Filter jobs
-  const filteredJobs = showOnlyRunning ? jobs.filter(j => j.status === 'running') : jobs
+  // Filter jobs by running status and search query
+  let filteredJobs = showOnlyRunning ? jobs.filter(j => j.status === 'running') : jobs
+
+  // Apply search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase()
+    filteredJobs = filteredJobs.filter(job =>
+      job.siteUrl.toLowerCase().includes(query) ||
+      job.siteName?.toLowerCase().includes(query) ||
+      job.inputId.toLowerCase().includes(query) ||
+      job.id.toLowerCase().includes(query)
+    )
+  }
 
   // Sort jobs
   const sortedJobs = [...filteredJobs].sort((a, b) => {
@@ -247,6 +291,22 @@ export function JobsTable({
   return (
     <>
       <div className="space-y-3">
+        {/* Enhanced Table Header with Search and Export */}
+        <EnhancedTableHeader
+          onSearch={setSearchQuery}
+          onExport={handleExport}
+          searchValue={searchQuery}
+          exporting={exporting}
+          placeholder="Search by site URL, job ID, or site name..."
+          filterBadges={showOnlyRunning ? [
+            {
+              label: 'Status',
+              value: 'Running',
+              onRemove: () => setShowOnlyRunning(false)
+            }
+          ] : []}
+        />
+
         {/* Selection Controls */}
         {jobs.length > 0 && (
           <div className="flex items-center justify-between">
@@ -398,10 +458,10 @@ export function JobsTable({
                 return (
                   <tr
                     key={job.id}
-                    className={`transition-colors ${
+                    className={`table-row-hover ${
                       isRunning
                         ? 'bg-emerald-50 hover:bg-emerald-100 cursor-pointer'
-                        : 'hover:bg-gray-50 cursor-pointer'
+                        : 'cursor-pointer'
                     }`}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('a')) {
