@@ -23,6 +23,7 @@ interface StatusBadgeProps {
   completionPercentage?: number | null
   size?: 'sm' | 'md' | 'lg'
   showPercentage?: boolean
+  showIcon?: boolean
   className?: string
 }
 
@@ -33,6 +34,7 @@ export function StatusBadge({
   completionPercentage,
   size = 'md',
   showPercentage = false,
+  showIcon = true,
   className = ''
 }: StatusBadgeProps) {
   // Determine effective status (use detailedStatus if available, fallback to legacy status)
@@ -64,7 +66,7 @@ export function StatusBadge({
       `}
       title={config.tooltip}
     >
-      <Icon className={`${iconSizes[size]} ${config.animate ? 'animate-spin' : ''}`} />
+      {showIcon && <Icon className={`${iconSizes[size]} ${config.animate ? 'animate-spin' : ''}`} />}
       <span>{config.label}</span>
       {showPercentage && completionPercentage !== null && completionPercentage !== undefined && (
         <span className="text-xs opacity-75">
