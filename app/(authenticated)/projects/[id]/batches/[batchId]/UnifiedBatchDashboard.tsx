@@ -6,9 +6,11 @@ import { useWebSocket } from '@/lib/useWebSocket'
 import { FileText, CheckCircle, Download, Play } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { ProgressiveButtonGroup } from '@/components/ProgressiveButtonGroup'
+import { toast } from '@/lib/toast'
 
 // Hero components
 import { RunningModeHero } from '@/components/batch-dashboard/RunningModeHero'
+import { CompletedModeHero } from '@/components/batch-dashboard/CompletedModeHero'
 
 // Configuration components
 import { InstructionsEditor } from '@/components/batch-dashboard/InstructionsEditor'
@@ -129,14 +131,20 @@ export function UnifiedBatchDashboard({
           setDashboardState('running')
           setShowCompletionCard(false)
           checkActiveExecution()
+          toast.batch.executionStarted(
+            event.data.batchName || 'Batch',
+            event.data.totalJobs || 0
+          )
           break
 
         case 'execution_paused':
           setDashboardState('paused')
+          toast.batch.executionPaused(event.data.batchName || 'Batch')
           break
 
         case 'execution_resumed':
           setDashboardState('running')
+          toast.batch.executionResumed(event.data.batchName || 'Batch')
           break
 
         case 'execution_stopped':
@@ -149,6 +157,23 @@ export function UnifiedBatchDashboard({
               completedAt: new Date().toISOString(),
               stats: finalStats,
             })
+
+            // Show completion toast
+            if (event.type === 'execution_completed') {
+              const duration = activeExecution.startedAt
+                ? new Date().getTime() - new Date(activeExecution.startedAt).getTime()
+                : 0
+
+              toast.batch.executionCompleted(
+                event.data.batchName || 'Batch',
+                {
+                  totalJobs: finalStats.totalJobs,
+                  successJobs: finalStats.completedJobs - finalStats.errorJobs,
+                  errorJobs: finalStats.errorJobs,
+                  duration,
+                }
+              )
+            }
           }
           setDashboardState('completed')
           setShowCompletionCard(true)
@@ -160,9 +185,41 @@ export function UnifiedBatchDashboard({
           break
 
         case 'execution_stats_updated':
+          checkActiveExecution()
+          break
+
         case 'job_started':
+          checkActiveExecution()
+          break
+
         case 'job_completed':
+          checkActiveExecution()
+          // Show toast for job completion
+          if (event.data.siteUrl) {
+            toast.job.completed(event.data.siteUrl, {
+              accuracy: event.data.accuracy,
+              onView: () => router.push(`/projects/${projectId}/batches/${batchId}?job=${event.data.jobId}`)
+            })
+          }
+          break
+
         case 'job_failed':
+          checkActiveExecution()
+          // Show toast for job failure
+          if (event.data.siteUrl) {
+            toast.job.failed(
+              event.data.siteUrl,
+              event.data.error || 'Unknown error',
+              {
+                onRetry: async () => {
+                  // TODO: Implement retry single job
+                  console.log('Retry job:', event.data.jobId)
+                }
+              }
+            )
+          }
+          break
+
         case 'job_progress':
           checkActiveExecution()
           break
@@ -170,7 +227,7 @@ export function UnifiedBatchDashboard({
     })
 
     return unsubscribe
-  }, [subscribe, batchId, activeExecution, checkActiveExecution])
+  }, [subscribe, batchId, activeExecution, checkActiveExecution, projectId, router])
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -546,6 +603,30 @@ export function UnifiedBatchDashboard({
             // TODO: Implement concurrency adjustment
             console.log('Adjust concurrency to:', value)
           }}
+        />
+      )}
+
+      {/* Completed Mode Hero - Show when execution just finished */}
+      {dashboardState === 'completed' && showCompletionCard && lastCompletedExecution && (
+        <CompletedModeHero
+          executionId={lastCompletedExecution.id}
+          projectId={projectId}
+          batchId={batchId}
+          stats={lastCompletedExecution.stats}
+          duration={lastCompletedExecution.startedAt && lastCompletedExecution.completedAt
+            ? new Date(lastCompletedExecution.completedAt).getTime() - new Date(lastCompletedExecution.startedAt).getTime()
+            : undefined}
+          hasGroundTruth={hasGroundTruth}
+          onSetupGroundTruth={() => setShowGroundTruth(true)}
+          onEditInstructions={() => setShowInstructions(true)}
+          onRunFull={handleRunFull}
+          onExport={() => setShowExport(true)}
+          onRetryFailed={async () => {
+            // TODO: Implement retry failed jobs
+            console.log('Retry failed jobs')
+          }}
+          isTestRun={lastCompletedExecution.stats.totalJobs < totalSites}
+          totalSitesInBatch={totalSites}
         />
       )}
     </div>

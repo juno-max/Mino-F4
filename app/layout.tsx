@@ -5,6 +5,7 @@ import Providers from '@/components/Providers'
 import TopNav from '@/components/navigation/TopNav'
 import LeftSidebar from '@/components/navigation/LeftSidebar'
 import LayoutWrapper from '@/components/navigation/LayoutWrapper'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,6 +25,17 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+          toastOptions={{
+            style: {
+              fontFamily: inter.style.fontFamily,
+            },
+          }}
+        />
       </body>
     </html>
   )

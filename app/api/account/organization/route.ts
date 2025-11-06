@@ -6,6 +6,8 @@ import { handleApiError } from '@/lib/api-helpers'
 import { eq, and, gte } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/account/organization
  * Get current user's organization details and usage stats

@@ -8,9 +8,9 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ className = '', children, padding = 'md', variant = 'default', ...props }: CardProps) {
   const paddingClasses = {
     none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+    sm: 'p-3',
+    md: 'p-4',
+    lg: 'p-6',
   }
 
   const variantClasses = {
@@ -32,7 +32,7 @@ export function Card({ className = '', children, padding = 'md', variant = 'defa
 
 export function CardHeader({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-4 py-3 border-b border-gray-100 ${className}`} {...props}>
+    <div className={`px-4 py-2 border-b border-gray-100 ${className}`} {...props}>
       {children}
     </div>
   )
@@ -56,7 +56,7 @@ export function CardDescription({ className = '', children, ...props }: HTMLAttr
 
 export function CardContent({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-4 py-4 ${className}`} {...props}>
+    <div className={`px-4 py-3 ${className}`} {...props}>
       {children}
     </div>
   )
@@ -64,7 +64,7 @@ export function CardContent({ className = '', children, ...props }: HTMLAttribut
 
 export function CardFooter({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`px-4 py-3 border-t border-gray-100 flex items-center justify-between ${className}`} {...props}>
+    <div className={`px-4 py-2 border-t border-gray-100 flex items-center justify-between ${className}`} {...props}>
       {children}
     </div>
   )

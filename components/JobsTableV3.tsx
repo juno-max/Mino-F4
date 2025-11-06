@@ -11,6 +11,8 @@ import { DurationColumn } from './table/DurationColumn'
 import { ActionsColumn } from './table/ActionsColumn'
 import { SmartFilters, FilterPreset } from './table/SmartFilters'
 import { BulkActionsToolbar } from './table/BulkActionsToolbar'
+import { JobTableSkeleton } from './batch-dashboard/SkeletonLoaders'
+import { VirtualizedJobsTable } from './batch-dashboard/VirtualizedJobsTable'
 
 interface ColumnInfo {
   name: string
@@ -45,6 +47,8 @@ interface JobsTableV3Props {
   onRetry?: (jobId: string) => void
   onDelete?: (jobId: string) => void
   onDownload?: (jobId: string) => void
+  enableVirtualization?: boolean // Auto-enable for 100+ jobs
+  virtualizationThreshold?: number
 }
 
 export function JobsTableV3({
@@ -56,7 +60,9 @@ export function JobsTableV3({
   priorityFields = [],
   onRetry,
   onDelete,
-  onDownload
+  onDownload,
+  enableVirtualization,
+  virtualizationThreshold = 100
 }: JobsTableV3Props) {
   const [jobs, setJobs] = useState<Job[]>(initialJobs)
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set())
@@ -190,6 +196,11 @@ export function JobsTableV3({
   const allFilteredSelected = filteredJobs.length > 0 &&
     filteredJobs.every(job => selectedJobs.has(job.id))
 
+  // Determine if virtualization should be enabled
+  const shouldVirtualize = enableVirtualization !== undefined
+    ? enableVirtualization
+    : filteredJobs.length >= virtualizationThreshold
+
   // Bulk action handlers
   const handleBulkRetry = () => {
     if (onRetry) {
@@ -243,8 +254,13 @@ export function JobsTableV3({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading jobs...</div>
+      <div className="w-full space-y-4">
+        <div className="flex gap-2">
+          {['all', 'needs-attention', 'running', 'perfect', 'failed'].map((filter) => (
+            <div key={filter} className="px-4 py-2 rounded-lg bg-gray-100 w-32 h-10 animate-pulse" />
+          ))}
+        </div>
+        <JobTableSkeleton rows={8} />
       </div>
     )
   }
@@ -258,11 +274,39 @@ export function JobsTableV3({
         counts={filterCounts}
       />
 
-      {/* Table */}
-      <div className="w-full overflow-x-auto border border-gray-200 rounded-lg">
-      <table className="w-full border-collapse">
+      {/* Performance Badge */}
+      {shouldVirtualize && (
+        <div className="flex items-center gap-2 text-xs text-gray-500 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+          <span className="inline-block h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <span>
+            High-performance mode active — rendering {filteredJobs.length} jobs efficiently
+          </span>
+        </div>
+      )}
+
+      {/* Table - Virtualized or Standard */}
+      {shouldVirtualize ? (
+        <VirtualizedJobsTable
+          jobs={filteredJobs}
+          columnSchema={columnSchema}
+          priorityFields={priorityFields}
+          selectedJobs={selectedJobs}
+          expandedRows={expandedRows}
+          onToggleSelection={toggleJobSelection}
+          onToggleExpansion={toggleRowExpansion}
+          onToggleAllSelections={toggleAllSelections}
+          allSelected={allFilteredSelected}
+          calculateAccuracy={calculateAccuracy}
+          onRetry={onRetry}
+          onDelete={onDelete}
+          onDownload={onDownload}
+        />
+      ) : (
+        <div className="w-full overflow-x-auto border border-gray-200 rounded-lg">
+          <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
+            <th className="w-12 px-2 py-3 text-center text-xs font-semibold text-gray-600">#</th>
             <th className="w-10 px-3 py-3">
               <button
                 onClick={toggleAllSelections}
@@ -298,20 +342,33 @@ export function JobsTableV3({
           </tr>
         </thead>
         <tbody>
-          {filteredJobs.map((job) => {
+          {filteredJobs.map((job, index) => {
             const isExpanded = expandedRows.has(job.id)
             const isSelected = selectedJobs.has(job.id)
             const accuracy = calculateAccuracy(job)
+            const rowNumber = index + 1
+
+            // Alternating row background
+            const rowBg = isSelected
+              ? 'bg-emerald-50/30'
+              : index % 2 === 0
+              ? 'bg-white'
+              : 'bg-gray-50/50'
 
             return (
               <>
                 {/* Main Row */}
                 <tr
                   key={job.id}
-                  className={`border-b border-gray-100 transition-colors hover:bg-gray-50 ${
-                    isSelected ? 'bg-emerald-50/30' : ''
-                  }`}
+                  className={`border-b border-gray-100 transition-colors hover:bg-gray-100/80 ${rowBg}`}
                 >
+                  {/* Row Number */}
+                  <td className="px-2 py-3 text-center">
+                    <span className="text-xs text-gray-400 font-mono">
+                      {rowNumber}
+                    </span>
+                  </td>
+
                   {/* Checkbox */}
                   <td className="px-3 py-3">
                     <button
@@ -351,9 +408,9 @@ export function JobsTableV3({
                       siteUrl={job.siteUrl}
                       siteName={job.siteName}
                       jobId={job.id}
+                      inputData={job.groundTruthData || undefined}
                     />
                   </td>
-
                   {/* 3. Progress/Outcome Column (280px) */}
                   <td className="px-3 py-3">
                     <ProgressOutcomeColumn
@@ -361,6 +418,14 @@ export function JobsTableV3({
                       progress={job.progressPercentage}
                       error={job.error}
                       streamingUrl={job.streamingUrl}
+                      currentStep={job.currentStep}
+                      currentUrl={job.siteName || job.siteUrl}
+                      lastActivityAt={job.startedAt}
+                      startedAt={job.startedAt}
+                      extractedData={job.extractedData}
+                      groundTruthData={job.groundTruthData}
+                      columnSchema={columnSchema}
+                      accuracy={accuracy}
                     />
                   </td>
 
@@ -376,7 +441,7 @@ export function JobsTableV3({
                   {/* 5. Key Data Preview Column (flex) */}
                   <td className="px-3 py-3">
                     <DataPreviewColumn
-                      data={job.extractedData}
+                      data={job.extractedData ?? null}
                       maxFields={3}
                       priorityFields={priorityFields}
                     />
@@ -407,7 +472,7 @@ export function JobsTableV3({
                 {/* Expanded Row - Full Details */}
                 {isExpanded && (
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    <td colSpan={9} className="px-3 py-4">
+                    <td colSpan={10} className="px-3 py-4">
                       <ExpandedJobDetails
                         job={job}
                         columnSchema={columnSchema}
@@ -433,7 +498,8 @@ export function JobsTableV3({
           No jobs found
         </div>
       )}
-      </div>
+        </div>
+      )}
 
       {/* Bulk Actions Toolbar */}
       <BulkActionsToolbar

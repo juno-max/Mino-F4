@@ -28,11 +28,11 @@ export async function GET(
     // Get all sessions for this job
     const jobSessions = await db.query.sessions.findMany({
       where: eq(sessions.jobId, id),
-      orderBy: [desc(sessions.createdAt)],
+      orderBy: [desc(sessions.sessionNumber)],
     })
 
     return NextResponse.json({
-      ...job,
+      job,
       sessions: jobSessions,
     })
   } catch (error) {
@@ -61,6 +61,7 @@ export async function PATCH(
     const {
       status,
       groundTruthData,
+      hasGroundTruth,
       isEvaluated,
       evaluationResult,
     } = bodyValidation.data
@@ -74,6 +75,7 @@ export async function PATCH(
       }
     }
     if (groundTruthData !== undefined) updateData.groundTruthData = groundTruthData
+    if (hasGroundTruth !== undefined) updateData.hasGroundTruth = hasGroundTruth
     if (isEvaluated !== undefined) updateData.isEvaluated = isEvaluated
     if (evaluationResult !== undefined) updateData.evaluationResult = evaluationResult
 

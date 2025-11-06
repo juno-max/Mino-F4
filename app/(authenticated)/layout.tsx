@@ -1,6 +1,7 @@
 import TopNav from '@/components/navigation/TopNav'
 import LeftSidebar from '@/components/navigation/LeftSidebar'
 import LayoutWrapper from '@/components/navigation/LayoutWrapper'
+import { GlobalCSVDropZone } from '@/components/GlobalCSVDropZone'
 
 export default function AuthenticatedLayout({
   children,
@@ -8,7 +9,7 @@ export default function AuthenticatedLayout({
   children: React.ReactNode
 }) {
   return (
-    <>
+    <GlobalCSVDropZone>
       {/* Navigation only for authenticated pages */}
       <TopNav />
       <LeftSidebar />
@@ -17,6 +18,6 @@ export default function AuthenticatedLayout({
       <LayoutWrapper>
         {children}
       </LayoutWrapper>
-    </>
+    </GlobalCSVDropZone>
   )
 }

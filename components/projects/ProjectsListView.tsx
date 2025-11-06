@@ -2,13 +2,15 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowUpDown, MoreVertical } from 'lucide-react'
+import { ArrowUpDown } from 'lucide-react'
 import { formatDistance } from 'date-fns'
+import { ProjectActions } from './ProjectActions'
 
 interface Project {
   id: string
   name: string
   description: string | null
+  instructions: string | null
   status: string
   progress: {
     current: number
@@ -19,6 +21,7 @@ interface Project {
   successRate: number
   lastRun: { time: string }
   updatedAt: Date
+  batchCount?: number
 }
 
 interface ProjectsListViewProps {
@@ -190,12 +193,15 @@ export function ProjectsListView({ projects }: ProjectsListViewProps) {
                   </Link>
                 </td>
                 <td className="px-2 py-2 text-right">
-                  <button
-                    className="p-0.5 hover:bg-gray-100 rounded transition-colors"
-                    aria-label="More actions"
-                  >
-                    <MoreVertical className="h-3.5 w-3.5 text-gray-600" />
-                  </button>
+                  <ProjectActions
+                    project={{
+                      id: project.id,
+                      name: project.name,
+                      description: project.description,
+                      instructions: project.instructions,
+                      batchCount: project.batchCount,
+                    }}
+                  />
                 </td>
               </tr>
             ))}

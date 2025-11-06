@@ -267,6 +267,7 @@ export const jobIdSchema = z.object({
 export const updateJobSchema = z.object({
   goal: z.string().min(10).max(5000).optional(),
   groundTruthData: z.record(z.string(), z.any()).optional(),
+  hasGroundTruth: z.boolean().optional(),
   status: z.enum(['queued', 'running', 'completed', 'error'], {
     errorMap: () => ({ message: 'Status must be one of: queued, running, completed, error' }),
   }).optional(),

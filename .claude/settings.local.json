@@ -140,7 +140,9 @@
       "Bash(then mv app/batches \"app/(authenticated)/batches\")",
       "Bash(else echo \"No batches folder\")",
       "Bash(then grep -E \"^(DATABASE_URL|NEXTAUTH|GOOGLE_CLIENT)\" .env.local)",
-      "Bash(claude-code config:*)"
+      "Bash(claude-code config:*)",
+      "Bash(openssl rand:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

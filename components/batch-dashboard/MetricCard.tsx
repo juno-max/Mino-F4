@@ -1,12 +1,14 @@
-import { ReactNode } from 'react'
+import { LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface MetricCardProps {
-  icon: ReactNode
+  icon: React.ReactElement<LucideIcon>
   label: string
   value: string | number
   subtitle?: string
-  trend?: ReactNode
-  color?: 'blue' | 'emerald' | 'amber' | 'red' | 'gray'
+  trend?: React.ReactNode
+  color?: 'emerald' | 'blue' | 'red' | 'amber' | 'gray'
+  className?: string
 }
 
 export function MetricCard({
@@ -15,35 +17,32 @@ export function MetricCard({
   value,
   subtitle,
   trend,
-  color = 'gray'
+  color,
+  className
 }: MetricCardProps) {
-  const colorClasses = {
-    blue: 'border-blue-200 bg-blue-50/50',
-    emerald: 'border-emerald-200 bg-emerald-50/50',
-    amber: 'border-amber-200 bg-amber-50/50',
-    red: 'border-red-200 bg-red-50/50',
-    gray: 'border-gray-200 bg-gray-50/50'
-  }
-
   return (
-    <div className={`rounded-lg border ${colorClasses[color]} p-3 transition-all hover:shadow-sm`}>
-      {/* Icon and label */}
+    <div className={cn(
+      'bg-white border border-gray-200 rounded-lg p-3 transition-all hover:shadow-sm',
+      className
+    )}>
       <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs font-medium text-gray-600">{label}</span>
+        <div className="flex-shrink-0">
+          {icon}
+        </div>
+        <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+          {label}
+        </span>
       </div>
-
-      {/* Value */}
-      <div className="mb-1">
-        <div className="text-2xl font-semibold text-gray-900">{value}</div>
-        {subtitle && (
-          <div className="text-xs text-gray-500 mt-0.5">{subtitle}</div>
-        )}
+      <div className="text-2xl font-semibold text-gray-900 mb-1">
+        {value}
       </div>
-
-      {/* Trend/visualization */}
+      {subtitle && (
+        <div className="text-xs text-gray-500 mb-2">
+          {subtitle}
+        </div>
+      )}
       {trend && (
-        <div className="mt-2 pt-2 border-t border-gray-200/50">
+        <div className="mt-2">
           {trend}
         </div>
       )}

@@ -1,79 +1,82 @@
+import { cn } from '@/lib/utils'
+
 interface SparklineProps {
   data: number[]
-  color?: 'blue' | 'emerald' | 'amber' | 'red'
+  color?: 'emerald' | 'blue' | 'red' | 'amber' | 'gray'
   height?: number
+  showDots?: boolean
 }
 
-export function Sparkline({ data, color = 'emerald', height = 24 }: SparklineProps) {
-  if (data.length === 0) return null
-
-  const colorClasses = {
-    blue: 'stroke-blue-500',
-    emerald: 'stroke-emerald-500',
-    amber: 'stroke-amber-500',
-    red: 'stroke-red-500'
+export function Sparkline({
+  data,
+  color = 'blue',
+  height = 24,
+  showDots = false
+}: SparklineProps) {
+  if (data.length === 0) {
+    return <div style={{ height }} className="w-full bg-gray-100 rounded" />
   }
 
-  const fillClasses = {
-    blue: 'fill-blue-100',
-    emerald: 'fill-emerald-100',
-    amber: 'fill-amber-100',
-    red: 'fill-red-100'
-  }
-
-  // Normalize data to 0-1 range
-  const max = Math.max(...data, 1)
-  const min = Math.min(...data, 0)
+  const max = Math.max(...data)
+  const min = Math.min(...data)
   const range = max - min || 1
 
-  const normalized = data.map(val => (val - min) / range)
+  const points = data.map((value, index) => {
+    const x = (index / (data.length - 1)) * 100
+    const y = ((max - value) / range) * 100
+    return `${x},${y}`
+  }).join(' ')
 
-  // Create SVG path
-  const width = 80
-  const padding = 2
-  const stepX = width / (data.length - 1 || 1)
+  const colorMap = {
+    emerald: 'stroke-emerald-500',
+    blue: 'stroke-blue-500',
+    red: 'stroke-red-500',
+    amber: 'stroke-amber-500',
+    gray: 'stroke-gray-400'
+  }
 
-  const points = normalized.map((val, i) => ({
-    x: i * stepX,
-    y: height - (val * (height - padding * 2)) - padding
-  }))
+  const fillColorMap = {
+    emerald: 'fill-emerald-100',
+    blue: 'fill-blue-100',
+    red: 'fill-red-100',
+    amber: 'fill-amber-100',
+    gray: 'fill-gray-100'
+  }
 
-  // Line path
-  const linePath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`)
-    .join(' ')
-
-  // Area path (for fill)
-  const areaPath = `
-    ${linePath}
-    L ${points[points.length - 1].x},${height}
-    L 0,${height}
-    Z
-  `
+  const filledPath = `M 0,100 L ${points} L 100,100 Z`
 
   return (
     <svg
-      width={width}
-      height={height}
-      className="overflow-visible"
-      viewBox={`0 0 ${width} ${height}`}
+      viewBox="0 0 100 100"
+      className="w-full"
+      style={{ height }}
+      preserveAspectRatio="none"
     >
-      {/* Area fill */}
       <path
-        d={areaPath}
-        className={fillClasses[color]}
-        opacity={0.3}
+        d={filledPath}
+        className={cn(fillColorMap[color], 'opacity-20')}
       />
-
-      {/* Line stroke */}
-      <path
-        d={linePath}
-        className={colorClasses[color]}
+      <polyline
+        points={points}
         fill="none"
-        strokeWidth={1.5}
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        className={colorMap[color]}
       />
+      {showDots && data.map((value, index) => {
+        const x = (index / (data.length - 1)) * 100
+        const y = ((max - value) / range) * 100
+        return (
+          <circle
+            key={index}
+            cx={x}
+            cy={y}
+            r="2"
+            className={cn(colorMap[color], 'fill-current')}
+          />
+        )
+      })}
     </svg>
   )
 }

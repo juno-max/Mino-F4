@@ -57,7 +57,11 @@ app.prepare().then(() => {
         wss.emit('connection', ws, request)
       })
     } else {
-      socket.destroy()
+      // Let Next.js handle other upgrade requests (HMR, etc.)
+      // Send a proper HTTP 404 response instead of destroying socket
+      // This prevents the "Cannot read properties of undefined (reading 'bind')" error
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
+      socket.end()
     }
   })
 

@@ -3,12 +3,15 @@
 /**
  * JobQuickViewModal Component
  * Quick view modal for job details without navigation
+ * Enhanced with screenshots, streaming video, and quick actions
  */
 
-import { X, ExternalLink, Clock, Zap, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { X, ExternalLink, Clock, Zap, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Trash2, CheckCircle, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { DataCell } from './DataCell'
+import { toast } from '@/lib/toast'
 import Link from 'next/link'
+import { useState } from 'react'
 
 interface Job {
   id: string
@@ -22,11 +25,17 @@ interface Job {
   error: string | null
   extractedData: Record<string, any> | null
   groundTruthData: Record<string, any> | null
+  streamingUrl?: string | null
+  screenshots?: string[] | null
+  siteName?: string | null
+  startedAt?: Date | null
+  completedAt?: Date | null
 }
 
 interface JobQuickViewModalProps {
   job: Job
   projectId: string
+  batchId?: string
   columnSchema: Array<{
     name: string
     type: string
@@ -34,15 +43,22 @@ interface JobQuickViewModalProps {
     isUrl: boolean
   }>
   onClose: () => void
+  onRefresh?: () => void
 }
 
 export function JobQuickViewModal({
   job,
   projectId,
+  batchId,
   columnSchema,
   onClose,
+  onRefresh,
 }: JobQuickViewModalProps) {
   const dataColumns = columnSchema.filter(col => !col.isUrl && !col.isGroundTruth)
+  const [currentScreenshot, setCurrentScreenshot] = useState(0)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isMarkingReviewed, setIsMarkingReviewed] = useState(false)
 
   const formatDuration = (ms: number | null) => {
     if (!ms) return '—'
@@ -61,9 +77,68 @@ export function JobQuickViewModal({
       case 'error':
         return <XCircle className="h-5 w-5 text-red-500" />
       case 'running':
-        return <Zap className="h-5 w-5 text-blue-500" />
+        return <Zap className="h-5 w-5 text-blue-500 animate-pulse" />
       default:
         return <Clock className="h-5 w-5 text-gray-400" />
+    }
+  }
+
+  const handleRetry = async () => {
+    setIsRetrying(true)
+    try {
+      const response = await fetch(`/api/jobs/${job.id}/retry`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error('Failed to retry job')
+      toast.success('Job queued for retry')
+      onRefresh?.()
+      onClose()
+    } catch (error: any) {
+      toast.error('Retry failed', { description: error.message })
+    } finally {
+      setIsRetrying(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error('Failed to delete job')
+      toast.success('Job deleted')
+      onRefresh?.()
+      onClose()
+    } catch (error: any) {
+      toast.error('Delete failed', { description: error.message })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleMarkReviewed = async () => {
+    setIsMarkingReviewed(true)
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reviewed: true,
+          reviewedAt: new Date().toISOString(),
+        }),
+      })
+      if (!response.ok) throw new Error('Failed to mark as reviewed')
+      toast.success('Marked as reviewed')
+      onRefresh?.()
+    } catch (error: any) {
+      toast.error('Mark reviewed failed', { description: error.message })
+    } finally {
+      setIsMarkingReviewed(false)
     }
   }
 
@@ -178,13 +253,100 @@ export function JobQuickViewModal({
               </div>
             )}
           </div>
+
+          {/* Screenshots */}
+          {job.screenshots && job.screenshots.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Screenshots</h3>
+              <div className="relative bg-gray-100 rounded-lg overflow-hidden">
+                <img
+                  src={job.screenshots[currentScreenshot]}
+                  alt={`Screenshot ${currentScreenshot + 1}`}
+                  className="w-full h-auto"
+                />
+                {job.screenshots.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentScreenshot((prev) => Math.max(0, prev - 1))}
+                      disabled={currentScreenshot === 0}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 hover:bg-white rounded-full shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="h-5 w-5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentScreenshot((prev) => Math.min(job.screenshots!.length - 1, prev + 1))}
+                      disabled={currentScreenshot === job.screenshots.length - 1}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 hover:bg-white rounded-full shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-700" />
+                    </button>
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/70 text-white text-sm rounded-full">
+                      {currentScreenshot + 1} / {job.screenshots.length}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Streaming URL */}
+          {job.streamingUrl && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Live Recording</h3>
+              <a
+                href={job.streamingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 transition-colors"
+              >
+                <PlayCircle className="h-5 w-5" />
+                <span className="text-sm font-medium">View Live Recording</span>
+                <ExternalLink className="h-4 w-4 ml-auto" />
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
-          <Button variant="primary" size="md" onClick={onClose}>
-            Close
-          </Button>
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {(job.status === 'failed' || job.status === 'error') && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRetry}
+                disabled={isRetrying}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${isRetrying ? 'animate-spin' : ''}`} />
+                {isRetrying ? 'Retrying...' : 'Retry'}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleMarkReviewed}
+              disabled={isMarkingReviewed}
+            >
+              <CheckCircle className="h-4 w-4 mr-1.5" />
+              {isMarkingReviewed ? 'Marking...' : 'Mark Reviewed'}
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="text-red-600 border-red-300 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+            <Button variant="primary" size="md" onClick={onClose}>
+              Close
+            </Button>
+          </div>
         </div>
       </div>
     </div>

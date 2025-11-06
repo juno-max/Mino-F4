@@ -1,14 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { MoreVertical, TrendingUp } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 import { Card } from '@/components/Card'
 import { formatDistance } from 'date-fns'
+import { ProjectActions } from './ProjectActions'
 
 interface Project {
   id: string
   name: string
   description: string | null
+  instructions: string | null
   status: string
   progress: {
     current: number
@@ -19,6 +21,7 @@ interface Project {
   successRate: number
   lastRun: { time: string }
   updatedAt: Date
+  batchCount?: number
 }
 
 interface ProjectsGridViewProps {
@@ -60,15 +63,15 @@ export function ProjectsGridView({ projects }: ProjectsGridViewProps) {
                   {project.status}
                 </span>
               </div>
-              <button
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
+              <ProjectActions
+                project={{
+                  id: project.id,
+                  name: project.name,
+                  description: project.description,
+                  instructions: project.instructions,
+                  batchCount: project.batchCount,
                 }}
-                className="p-0.5 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
-              >
-                <MoreVertical className="h-3.5 w-3.5 text-gray-600" />
-              </button>
+              />
             </div>
 
             {/* Project Name - Single Line */}

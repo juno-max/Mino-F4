@@ -74,23 +74,23 @@ export default function OrganizationPage() {
   const jobsUsagePercent = (org.currentMonthJobsCount / org.maxJobsPerMonth) * 100
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-4">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-4">
           <h1 className="text-3xl font-bold text-gray-900">Organization Settings</h1>
           <p className="mt-2 text-gray-600">Manage your organization and team settings</p>
         </div>
 
         {/* Organization Info Card */}
         <div className="bg-white shadow rounded-lg mb-6">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <BuildingOfficeIcon className="h-6 w-6 mr-2 text-blue-600" />
               Organization Details
             </h2>
           </div>
-          <div className="px-6 py-5 space-y-4">
+          <div className="px-4 py-3 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Organization Name
@@ -139,13 +139,13 @@ export default function OrganizationPage() {
 
         {/* Usage Card */}
         <div className="bg-white shadow rounded-lg mb-6">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <ChartBarIcon className="h-6 w-6 mr-2 text-blue-600" />
               Resource Usage
             </h2>
           </div>
-          <div className="px-6 py-5 space-y-6">
+          <div className="px-4 py-3 space-y-4">
             {/* Projects Usage */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -207,13 +207,13 @@ export default function OrganizationPage() {
 
         {/* Team Card (Coming Soon) */}
         <div className="bg-white shadow rounded-lg mb-6">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <UserGroupIcon className="h-6 w-6 mr-2 text-blue-600" />
               Team Members
             </h2>
           </div>
-          <div className="px-6 py-12 text-center">
+          <div className="px-6 py-6 text-center">
             <UserGroupIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 mb-4">Team management coming soon!</p>
             <p className="text-sm text-gray-500">
@@ -224,13 +224,13 @@ export default function OrganizationPage() {
 
         {/* Billing Card (Coming Soon) */}
         <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <CreditCardIcon className="h-6 w-6 mr-2 text-blue-600" />
               Billing & Subscription
             </h2>
           </div>
-          <div className="px-6 py-12 text-center">
+          <div className="px-6 py-6 text-center">
             <CreditCardIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 mb-4">Billing management coming soon!</p>
             <p className="text-sm text-gray-500 mb-6">

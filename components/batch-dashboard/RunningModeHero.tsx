@@ -1,8 +1,11 @@
 'use client'
 
 import { Button } from '@/components/Button'
-import { Pause, Square, Settings, ExternalLink, PlayCircle } from 'lucide-react'
+import { Pause, Square, PlayCircle, Target, CheckCircle, Zap, XCircle, Clock } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { MetricCard } from './MetricCard'
+import { Sparkline } from './Sparkline'
+import { LiveAgentCard } from './LiveAgentCard'
 
 interface RunningModeHeroProps {
   executionId: string
@@ -51,6 +54,7 @@ export function RunningModeHero({
   onAdjustConcurrency,
 }: RunningModeHeroProps) {
   const [elapsedTime, setElapsedTime] = useState('')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   // Calculate elapsed time
   useEffect(() => {
@@ -60,6 +64,7 @@ export function RunningModeHero({
       const start = new Date(startedAt)
       const now = new Date()
       const diff = Math.floor((now.getTime() - start.getTime()) / 1000)
+      setElapsedSeconds(diff)
 
       const minutes = Math.floor(diff / 60)
       const seconds = diff % 60
@@ -71,24 +76,18 @@ export function RunningModeHero({
     return () => clearInterval(interval)
   }, [startedAt])
 
-  // Calculate progress percentage
+  // Calculate metrics
   const progressPercent = stats.totalJobs > 0
     ? Math.round((stats.completedJobs / stats.totalJobs) * 100)
     : 0
 
-  // Calculate health score (simple algorithm)
   const successRate = stats.completedJobs > 0
-    ? (stats.completedJobs - stats.errorJobs) / stats.completedJobs
-    : 1
-  const healthScore = Math.round(successRate * 100)
-  const healthColor =
-    healthScore >= 90 ? 'text-emerald-600' :
-    healthScore >= 70 ? 'text-yellow-600' :
-    'text-red-600'
-  const healthIcon =
-    healthScore >= 90 ? '🟢' :
-    healthScore >= 70 ? '🟡' :
-    '🔴'
+    ? Math.round(((stats.passedJobs || 0) / stats.completedJobs) * 100)
+    : 100
+
+  const errorRate = stats.completedJobs > 0
+    ? Math.round((stats.errorJobs / stats.completedJobs) * 100)
+    : 0
 
   // Estimate completion time
   const estimateCompletion = () => {
@@ -101,217 +100,167 @@ export function RunningModeHero({
     const remaining = stats.totalJobs - stats.completedJobs
     const estimatedSeconds = Math.round(remaining / rate)
 
+    if (estimatedSeconds < 60) return `${estimatedSeconds}s`
     const minutes = Math.floor(estimatedSeconds / 60)
-    const seconds = estimatedSeconds % 60
-    return `${minutes}m ${seconds}s`
+    if (minutes < 60) return `~${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    return `~${hours}h ${minutes % 60}m`
   }
+
+  // Generate sparkline data (mock for now - could be real historical data)
+  const successTrend = Array.from({ length: 10 }, (_, i) => {
+    // Simulate improving success rate over time
+    return Math.min(100, successRate - 20 + i * 2 + Math.random() * 5)
+  })
 
   const isPaused = status === 'paused'
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-fintech-md p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
+    <div className="bg-gradient-to-r from-blue-50 to-emerald-50 border-b border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        {/* Top row: Title + Controls */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center animate-pulse shadow-lg">
+              <PlayCircle className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {isPaused ? 'Execution Paused' : 'Batch Executing'}
+              </h2>
+              <p className="text-sm text-gray-600">{elapsedTime} elapsed</p>
+            </div>
+          </div>
+
+          {/* Execution controls */}
           <div className="flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {isPaused ? 'Execution Paused' : 'Test Run In Progress'}
-            </h2>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <span>⏱</span>
-          <span className="font-mono font-semibold">{elapsedTime}</span>
-          <span className="text-gray-400">elapsed</span>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
-        {/* Completed */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-          <div className="text-3xl font-bold text-emerald-700 mb-1">
-            {stats.completedJobs}/{stats.totalJobs}
-          </div>
-          <div className="text-sm text-emerald-600 font-medium">DONE ✅</div>
-          <div className="text-xs text-emerald-600 mt-1">
-            {Math.round((stats.completedJobs / stats.totalJobs) * 100)}%
-          </div>
-        </div>
-
-        {/* Running */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="text-3xl font-bold text-blue-700 mb-1">
-            {stats.runningJobs}/{stats.totalJobs}
-          </div>
-          <div className="text-sm text-blue-600 font-medium flex items-center gap-1">
-            RUNNING
-            {stats.runningJobs > 0 && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
+            {isPaused ? (
+              <Button size="sm" variant="primary" onClick={onResume}>
+                <PlayCircle className="h-4 w-4 mr-1.5" />
+                Resume
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={onPause}>
+                <Pause className="h-4 w-4 mr-1.5" />
+                Pause
+              </Button>
             )}
-          </div>
-          <div className="text-xs text-blue-600 mt-1">
-            {Math.round((stats.runningJobs / stats.totalJobs) * 100)}%
-          </div>
-        </div>
-
-        {/* Queued */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="text-3xl font-bold text-gray-700 mb-1">
-            {stats.queuedJobs}/{stats.totalJobs}
-          </div>
-          <div className="text-sm text-gray-600 font-medium">QUEUED</div>
-          <div className="text-xs text-gray-600 mt-1">
-            {Math.round((stats.queuedJobs / stats.totalJobs) * 100)}%
-          </div>
-        </div>
-
-        {/* Failed */}
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="text-3xl font-bold text-red-700 mb-1">
-            {stats.errorJobs}/{stats.totalJobs}
-          </div>
-          <div className="text-sm text-red-600 font-medium">FAILED</div>
-          <div className="text-xs text-red-600 mt-1">
-            {Math.round((stats.errorJobs / stats.totalJobs) * 100)}%
-          </div>
-        </div>
-
-        {/* Health */}
-        <div className="bg-white border-2 border-gray-300 rounded-lg p-4">
-          <div className="text-sm font-semibold text-gray-700 mb-2">Health</div>
-          <div className={`text-3xl font-bold ${healthColor} mb-1 flex items-center gap-2`}>
-            {healthIcon} {healthScore}
-          </div>
-          <div className="text-xs text-gray-600 space-y-0.5">
-            <div className="flex items-center gap-1">
-              {successRate >= 0.9 ? '✅' : '⚠️'} Success
-            </div>
-            <div className="flex items-center gap-1">
-              ✅ Quality
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-          <span className="font-medium">Progress</span>
-          <span className="font-semibold">{progressPercent}%</span>
-        </div>
-        <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500 ease-out"
-            style={{ width: `${progressPercent}%` }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-30 animate-shimmer"></div>
-          </div>
-        </div>
-        <div className="text-xs text-gray-500 mt-1 text-right">
-          Estimated completion: {estimateCompletion()}
-        </div>
-      </div>
-
-      {/* Active Agents Preview */}
-      {runningJobs.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
-              Active Agents ({runningJobs.length} running)
-            </h3>
-            <a
-              href={`/projects/${projectId}/batches/${batchId}/executions/${executionId}/live`}
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onStop}
+              className="text-red-600 border-red-300 hover:bg-red-50"
             >
-              View All
-              <ExternalLink className="h-3 w-3" />
-            </a>
+              <Square className="h-4 w-4 mr-1.5" />
+              Stop
+            </Button>
           </div>
+        </div>
 
-          <div className="space-y-2">
-            {runningJobs.slice(0, 2).map((job) => (
-              <div
-                key={job.id}
-                className="bg-gradient-to-r from-blue-50 to-transparent border border-blue-200 rounded-lg p-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="relative flex h-2 w-2 flex-shrink-0">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                    </span>
-                    <span className="font-medium text-gray-900 truncate">
-                      {job.siteName || job.siteUrl}
-                    </span>
-                    <span className="text-xs text-gray-500">•</span>
-                    <span className="text-sm text-gray-600 truncate">
-                      {job.currentStep || 'Processing...'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-                    <div className="text-sm font-semibold text-blue-600">
-                      {job.progressPercentage || 0}%
-                    </div>
-                    <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${job.progressPercentage || 0}%` }}
-                      ></div>
-                    </div>
-                  </div>
+        {/* Metrics grid - Visual, compact, scannable */}
+        <div className="grid grid-cols-5 gap-3 mb-4">
+          {/* Progress */}
+          <MetricCard
+            icon={<Target className="h-5 w-5 text-blue-500" />}
+            label="Progress"
+            value={`${stats.completedJobs}/${stats.totalJobs}`}
+            subtitle={`${progressPercent}%`}
+            color="blue"
+            trend={
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
                 </div>
               </div>
-            ))}
+            }
+          />
+
+          {/* Success Rate */}
+          <MetricCard
+            icon={<CheckCircle className="h-5 w-5 text-emerald-500" />}
+            label="Success"
+            value={`${stats.passedJobs || 0}`}
+            subtitle={`${successRate}% pass`}
+            color="emerald"
+            trend={<Sparkline data={successTrend} color="emerald" />}
+          />
+
+          {/* Running */}
+          <MetricCard
+            icon={<Zap className="h-5 w-5 text-blue-500 animate-pulse" />}
+            label="Running"
+            value={stats.runningJobs}
+            subtitle="Active agents"
+            color="blue"
+            trend={
+              runningJobs.length > 0 ? (
+                <div className="text-[10px] text-gray-600 truncate">
+                  {runningJobs.slice(0, 2).map(j =>
+                    (j.siteName || j.siteUrl).split('/')[0].replace('www.', '')
+                  ).join(', ')}
+                  {runningJobs.length > 2 && ` +${runningJobs.length - 2}`}
+                </div>
+              ) : undefined
+            }
+          />
+
+          {/* Errors */}
+          <MetricCard
+            icon={<XCircle className="h-5 w-5 text-red-500" />}
+            label="Errors"
+            value={stats.errorJobs}
+            subtitle={errorRate > 10 ? '⚠️ High rate' : errorRate > 0 ? 'Normal' : 'None'}
+            color={errorRate > 10 ? 'red' : errorRate > 0 ? 'amber' : 'gray'}
+          />
+
+          {/* ETA */}
+          <MetricCard
+            icon={<Clock className="h-5 w-5 text-gray-500" />}
+            label="Est. Completion"
+            value={estimateCompletion()}
+            subtitle={`${stats.totalJobs - stats.completedJobs} left`}
+            color="gray"
+            trend={
+              <div className="flex items-center gap-1">
+                <div className="flex-1 h-1 bg-gray-200 rounded-full">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      elapsedSeconds < 120 ? 'bg-emerald-500' :
+                      elapsedSeconds < 300 ? 'bg-blue-500' :
+                      elapsedSeconds < 600 ? 'bg-amber-500' :
+                      'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.min(elapsedSeconds / 600 * 100, 100)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-gray-500">
+                  {elapsedSeconds < 60 ? `${elapsedSeconds}s` :
+                   elapsedSeconds < 3600 ? `${Math.floor(elapsedSeconds / 60)}m` :
+                   `${Math.floor(elapsedSeconds / 3600)}h`}
+                </span>
+              </div>
+            }
+          />
+        </div>
+
+        {/* Live agents preview - Compact horizontal scroll */}
+        {runningJobs.length > 0 && (
+          <div className="border-t border-gray-200 pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="h-4 w-4 text-blue-500 animate-pulse" />
+              <span className="text-xs font-medium text-gray-700">Live Agents</span>
+              <span className="text-xs text-gray-500">({runningJobs.length} running)</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+              {runningJobs.map(job => (
+                <LiveAgentCard key={job.id} job={job} compact />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Controls */}
-      <div className="flex items-center gap-3">
-        {isPaused ? (
-          <Button variant="primary" onClick={onResume}>
-            <PlayCircle className="h-4 w-4 mr-2" />
-            Resume
-          </Button>
-        ) : (
-          <Button variant="outline" onClick={onPause}>
-            <Pause className="h-4 w-4 mr-2" />
-            Pause
-          </Button>
         )}
-
-        <Button variant="outline" onClick={onStop} className="text-red-600 border-red-300 hover:bg-red-50">
-          <Square className="h-4 w-4 mr-2" />
-          Stop
-        </Button>
-
-        <div className="flex items-center gap-2 ml-auto">
-          <Settings className="h-4 w-4 text-gray-500" />
-          <label className="text-sm text-gray-600">Concurrency:</label>
-          <select
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
-            defaultValue="5"
-            onChange={(e) => onAdjustConcurrency?.(parseInt(e.target.value))}
-          >
-            <option value="1">1</option>
-            <option value="3">3</option>
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-          </select>
-        </div>
       </div>
     </div>
   )

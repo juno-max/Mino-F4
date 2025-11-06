@@ -25,23 +25,40 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email) return null
 
-        // Find or create dev user
-        let [user] = await db.select().from(users).where(eq(users.email, credentials.email))
+        try {
+          // Find or create dev user
+          const existingUsers = await db.select().from(users).where(eq(users.email, credentials.email))
+          let user = existingUsers[0]
 
-        if (!user) {
-          // Create dev user
-          [user] = await db.insert(users).values({
+          if (!user) {
+            // Create dev user
+            const newUsers = await db.insert(users).values({
+              email: credentials.email,
+              name: credentials.email.split('@')[0],
+              emailVerified: new Date(),
+            }).returning()
+            user = newUsers[0]
+          }
+
+          if (!user) {
+            console.error('[AUTH ERROR] Failed to create/find user for:', credentials.email)
+            return null
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+          }
+        } catch (error: any) {
+          console.error('[AUTH ERROR]', {
+            timestamp: new Date().toISOString(),
+            error: error.message,
+            stack: error.stack,
             email: credentials.email,
-            name: credentials.email.split('@')[0],
-            emailVerified: new Date(),
-          }).returning()
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
+          })
+          return null
         }
       }
     }),
@@ -169,5 +186,5 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
-  debug: process.env.NODE_ENV === 'development',
+  debug: false, // Disable debug warnings in console
 }

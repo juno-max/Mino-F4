@@ -100,10 +100,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50 py-4">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-4">
           <h1 className="text-3xl font-bold text-gray-900">Account Settings</h1>
           <p className="mt-2 text-gray-600">Manage your profile and organization settings</p>
         </div>
@@ -124,13 +124,13 @@ export default function ProfilePage() {
 
         {/* Profile Card */}
         <div className="bg-white shadow rounded-lg mb-6">
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <UserCircleIcon className="h-6 w-6 mr-2 text-blue-600" />
               Profile Information
             </h2>
           </div>
-          <div className="px-6 py-5 space-y-6">
+          <div className="px-4 py-3 space-y-4">
             {/* Profile Picture */}
             <div className="flex items-center space-x-4">
               {profile.image ? (
@@ -244,13 +244,13 @@ export default function ProfilePage() {
         {/* Organization Card */}
         {organization && (
           <div className="bg-white shadow rounded-lg">
-            <div className="px-6 py-5 border-b border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900 flex items-center">
                 <ShieldCheckIcon className="h-6 w-6 mr-2 text-blue-600" />
                 Organization & Permissions
               </h2>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-4 py-3 space-y-4">
               {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>

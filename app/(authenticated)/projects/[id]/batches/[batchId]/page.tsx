@@ -15,12 +15,16 @@ import { CollapsibleSection } from '@/components/batch-dashboard/CollapsibleSect
 import { BulkGTEditor } from './BulkGTEditor'
 import { ColumnMetrics } from './ColumnMetrics'
 import { AccuracyTrendChart } from './AccuracyTrendChart'
+import { BatchActions } from '@/components/batches/BatchActions'
+import { getUserWithOrganization } from '@/lib/auth-helpers'
 
 export default async function BatchDetailPage({
   params,
 }: {
   params: { id: string; batchId: string }
 }) {
+  const user = await getUserWithOrganization()
+
   const batch = await db.query.batches.findFirst({
     where: eq(batches.id, params.batchId),
   })
@@ -37,6 +41,15 @@ export default async function BatchDetailPage({
   if (!project) {
     notFound()
   }
+
+  // Fetch all projects for this organization (for moving batch between projects)
+  const allProjects = await db.query.projects.findMany({
+    where: eq(projects.organizationId, user.organizationId),
+    columns: {
+      id: true,
+      name: true,
+    },
+  })
 
   const batchExecutions = await db.query.executions.findMany({
     where: eq(executions.batchId, params.batchId),
@@ -97,14 +110,26 @@ export default async function BatchDetailPage({
         ]}
         status={<StatusBadge status={overallStatus} size="sm" />}
         actions={
-          gtColumns.length > 0 ? (
-            <Link href={`/projects/${params.id}/batches/${params.batchId}/analytics`}>
-              <Button variant="outline" size="sm">
-                <BarChart3 className="h-4 w-4 mr-1" />
-                Analytics
-              </Button>
-            </Link>
-          ) : null
+          <div className="flex items-center gap-2">
+            {gtColumns.length > 0 && (
+              <Link href={`/projects/${params.id}/batches/${params.batchId}/analytics`}>
+                <Button variant="outline" size="sm">
+                  <BarChart3 className="h-4 w-4 mr-1" />
+                  Analytics
+                </Button>
+              </Link>
+            )}
+            <BatchActions
+              batch={{
+                id: batch.id,
+                name: batch.name,
+                description: batch.description,
+                projectId: batch.projectId,
+                totalSites: batch.totalSites,
+              }}
+              projects={allProjects}
+            />
+          </div>
         }
       />
 

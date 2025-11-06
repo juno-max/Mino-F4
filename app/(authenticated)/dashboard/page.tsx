@@ -52,35 +52,18 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-emerald-50/30">
       {/* Hero Section */}
       <div className="border-b border-gray-200 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
-              <p className="text-sm text-gray-600 mt-2">
-                Welcome back! Here's your automation overview
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <Link href="/projects/new">
-                <Button variant="outline" size="md">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Project
-                </Button>
-              </Link>
-              <Link href="/projects">
-                <Button variant="primary" size="md">
-                  <Folder className="h-4 w-4 mr-2" />
-                  View Projects
-                </Button>
-              </Link>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Welcome back! Here's your automation overview
+            </p>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {/* Stats Grid - New MetricCard Components */}
         <MetricGrid columns={4}>
           <MetricCard
@@ -117,20 +100,18 @@ export default async function DashboardPage() {
           />
         </MetricGrid>
 
-        <div className="h-8" />
-
         {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
           {/* Recent Activity */}
           <div className="lg:col-span-2">
             <Card>
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Recent Activity</h2>
-                <p className="text-sm text-gray-600 mt-1">Your latest batch updates</p>
+              <div className="px-4 py-2 border-b border-gray-200">
+                <h2 className="text-base font-bold text-gray-900">Recent Activity</h2>
+                <p className="text-xs text-gray-600 mt-0.5">Your latest batch updates</p>
               </div>
 
               {recentActivity.length === 0 ? (
-                <div className="p-12 text-center">
+                <div className="p-6 text-center">
                   <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No activity yet</h3>
                   <p className="text-sm text-gray-600 mb-6">
@@ -149,7 +130,7 @@ export default async function DashboardPage() {
                     <Link
                       key={batch.id}
                       href={`/projects/${batch.projectId}/batches/${batch.id}`}
-                      className="block px-6 py-4 table-row-hover"
+                      className="block px-4 py-3 table-row-hover"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -178,10 +159,10 @@ export default async function DashboardPage() {
           <div className="space-y-6">
             {/* Quick Actions Card */}
             <Card>
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Quick Actions</h2>
+              <div className="px-4 py-2 border-b border-gray-200">
+                <h2 className="text-base font-bold text-gray-900">Quick Actions</h2>
               </div>
-              <div className="p-6 space-y-3">
+              <div className="p-4 space-y-2">
                 <Link href="/projects/new">
                   <Button variant="primary" size="md" className="w-full justify-start">
                     <Plus className="h-4 w-4 mr-2" />
@@ -207,14 +188,14 @@ export default async function DashboardPage() {
 
             {/* Tips Card */}
             <Card className="bg-gradient-to-br from-blue-50 to-blue-100/30 border-blue-200">
-              <div className="p-6">
-                <h3 className="text-sm font-semibold text-blue-900 mb-3">💡 Pro Tip</h3>
-                <p className="text-sm text-blue-800 mb-4">
-                  Press <kbd className="px-2 py-1 bg-blue-200 rounded text-xs font-semibold">Cmd+K</kbd> to
-                  quickly search and navigate between your projects and batches.
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-blue-900 mb-2">💡 Pro Tip</h3>
+                <p className="text-xs text-blue-800 mb-2">
+                  Press <kbd className="px-1.5 py-0.5 bg-blue-200 rounded text-xs font-semibold">Cmd+K</kbd> to
+                  quickly search and navigate.
                 </p>
                 <p className="text-xs text-blue-700">
-                  Press <kbd className="px-1.5 py-0.5 bg-blue-200 rounded font-semibold">?</kbd> to see all keyboard shortcuts.
+                  Press <kbd className="px-1 py-0.5 bg-blue-200 rounded font-semibold text-xs">?</kbd> for shortcuts.
                 </p>
               </div>
             </Card>
