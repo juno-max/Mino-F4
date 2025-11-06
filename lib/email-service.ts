@@ -10,7 +10,7 @@ import { logger } from './logger'
 // CONFIGURATION
 // ============================================================================
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 const FROM_EMAIL = process.env.EMAIL_FROM || 'MINO <notifications@mino.app>'
 const BASE_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000'
 
@@ -48,7 +48,7 @@ export async function sendEmail(params: EmailParams) {
 
   try {
     // Skip in development if no API key configured
-    if (!process.env.RESEND_API_KEY) {
+    if (!process.env.RESEND_API_KEY || !resend) {
       logger.warn({
         to,
         subject,
